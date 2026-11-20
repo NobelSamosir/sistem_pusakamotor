@@ -1,0 +1,19 @@
+# Python
+ml-service/.venv/
+__pycache__/
+*.pyc
+
+# Laravel
+backend/vendor/
+backend/.env
+backend/storage/*.key
+
+# React
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Lain-lain
+.vscode/
+.DS_Store
+Thumbs.db

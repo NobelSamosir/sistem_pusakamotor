@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pandas
+numpy
+joblib
+# scikit-learn dan xgboost SENGAJA tidak ditulis di sini.
+# Pasang dengan versi yang sama persis seperti di Colab (lihat "versions" di models/metadata.json):
+#   pip install scikit-learn==VERSI_COLAB xgboost==VERSI_COLAB
