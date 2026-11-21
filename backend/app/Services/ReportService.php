@@ -1,0 +1,235 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Account;
+use App\Models\JournalEntry;
+use App\Models\Motorcycle;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Lima laporan SIA. Laporan keuangan (laba rugi, neraca, arus kas)
+ * dihitung dari journal_lines, sehingga selalu konsisten dengan jurnal.
+ */
+class ReportService
+{
+    /* ------------------------------------------------------------------ */
+    /* 1. Laporan stok kendaraan                                           */
+    /* ------------------------------------------------------------------ */
+    public function stock(): array
+    {
+        $rows = DB::table('motorcycles as m')
+            ->join('purchases as p', 'p.motorcycle_id', '=', 'm.id')
+            ->leftJoin('vehicle_costs as c', function ($join) {
+                $join->on('c.motorcycle_id', '=', 'm.id')->where('c.hpp_included', true);
+            })
+            ->whereIn('m.status', [Motorcycle::STATUS_TERSEDIA, Motorcycle::STATUS_PERBAIKAN])
+            ->groupBy('m.id', 'm.vehicle_code', 'm.frame_number', 'm.brand', 'm.model', 'm.year', 'm.color', 'm.status', 'p.purchase_date', 'p.purchase_price')
+            ->orderBy('p.purchase_date')
+            ->selectRaw('m.id, m.vehicle_code, m.frame_number, m.brand, m.model, m.year, m.color, m.status,
+                p.purchase_date, p.purchase_price, COALESCE(SUM(c.amount), 0) as hpp_costs')
+            ->get();
+
+        $today = Carbon::today();
+        $items = $rows->map(function ($r) use ($today) {
+            $hpp = Money::of($r->purchase_price)->plus(Money::of($r->hpp_costs));
+
+            return [
+                'id' => $r->id,
+                'vehicle_code' => $r->vehicle_code,
+                'frame_number' => $r->frame_number,
+                'unit' => "{$r->brand} {$r->model} {$r->year}",
+                'color' => $r->color,
+                'status' => $r->status,
+                'purchase_date' => $r->purchase_date,
+                'purchase_price' => Money::str(Money::of($r->purchase_price)),
+                'hpp_costs' => Money::str(Money::of($r->hpp_costs)),
+                'hpp' => Money::str($hpp),
+                'days_in_stock' => (int) Carbon::parse($r->purchase_date)->diffInDays($today),
+            ];
+        })->values();
+
+        return [
+            'items' => $items,
+            'total_units' => $items->count(),
+            'total_hpp' => Money::str($items->reduce(fn ($t, $i) => $t->plus(Money::of($i['hpp'])), Money::of(0))),
+        ];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 2. Laporan pembelian dan penjualan                                  */
+    /* ------------------------------------------------------------------ */
+    public function purchasesSales(string $from, string $to): array
+    {
+        $purchases = DB::table('purchases as p')
+            ->join('motorcycles as m', 'm.id', '=', 'p.motorcycle_id')
+            ->join('suppliers as s', 's.id', '=', 'p.supplier_id')
+            ->whereBetween('p.purchase_date', [$from, $to])
+            ->orderBy('p.purchase_date')->orderBy('p.id')
+            ->selectRaw("p.purchase_number, p.purchase_date, m.vehicle_code, m.frame_number,
+                m.brand || ' ' || m.model || ' ' || m.year as unit, s.supplier_name, p.purchase_price")
+            ->get();
+
+        $sales = DB::table('sales as s')
+            ->join('motorcycles as m', 'm.id', '=', 's.motorcycle_id')
+            ->join('customers as c', 'c.id', '=', 's.customer_id')
+            ->whereBetween('s.sale_date', [$from, $to])
+            ->orderBy('s.sale_date')->orderBy('s.id')
+            ->selectRaw("s.sale_number, s.sale_date, m.vehicle_code, m.frame_number,
+                m.brand || ' ' || m.model || ' ' || m.year as unit, c.customer_name,
+                s.sale_price, s.hpp_amount, s.gross_profit")
+            ->get()
+            ->map(function ($r) {
+                $profit = Money::of($r->gross_profit);
+                $r->markup = Money::of($r->hpp_amount)->isZero() ? null
+                    : (string) $profit->dividedBy(Money::of($r->hpp_amount), 4, \Brick\Math\RoundingMode::HALF_UP);
+                $r->margin = (string) $profit->dividedBy(Money::of($r->sale_price), 4, \Brick\Math\RoundingMode::HALF_UP);
+
+                return $r;
+            });
+
+        $sum = fn ($rows, $col) => Money::str($rows->reduce(fn ($t, $r) => $t->plus(Money::of($r->$col)), Money::of(0)));
+
+        return [
+            'period' => ['from' => $from, 'to' => $to],
+            'purchases' => $purchases,
+            'sales' => $sales,
+            'totals' => [
+                'purchase_count' => $purchases->count(),
+                'purchase_amount' => $sum($purchases, 'purchase_price'),
+                'sale_count' => $sales->count(),
+                'sale_amount' => $sum($sales, 'sale_price'),
+                'hpp_amount' => $sum($sales, 'hpp_amount'),
+                'gross_profit' => $sum($sales, 'gross_profit'),
+            ],
+        ];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 3. Laporan laba rugi                                                */
+    /* ------------------------------------------------------------------ */
+    public function incomeStatement(string $from, string $to): array
+    {
+        $b = $this->balances($to, $from);
+
+        $revenue = $b[Account::PENDAPATAN];
+        $cogs = $b[Account::HPP];
+        $expense = $b[Account::BEBAN_OPERASIONAL];
+        $grossProfit = $revenue->minus($cogs);
+        $netProfit = $grossProfit->minus($expense);
+
+        return [
+            'period' => ['from' => $from, 'to' => $to],
+            'revenue' => Money::str($revenue),
+            'cogs' => Money::str($cogs),
+            'gross_profit' => Money::str($grossProfit),
+            'operating_expense' => Money::str($expense),
+            'net_profit' => Money::str($netProfit),
+        ];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 4. Laporan neraca per tanggal                                       */
+    /* ------------------------------------------------------------------ */
+    public function balanceSheet(string $date): array
+    {
+        $b = $this->balances($date);
+
+        $cash = $b[Account::KAS];
+        $inventory = $b[Account::PERSEDIAAN];
+        $capital = $b[Account::MODAL];
+        $profit = $b[Account::PENDAPATAN]->minus($b[Account::HPP])->minus($b[Account::BEBAN_OPERASIONAL]);
+
+        $assets = $cash->plus($inventory);
+        $equity = $capital->plus($profit);
+
+        return [
+            'date' => $date,
+            'assets' => [
+                'cash' => Money::str($cash),
+                'inventory' => Money::str($inventory),
+                'total' => Money::str($assets),
+            ],
+            'equity' => [
+                'capital' => Money::str($capital),
+                'retained_profit' => Money::str($profit),
+                'total' => Money::str($equity),
+            ],
+            'is_balanced' => $assets->isEqualTo($equity),
+        ];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* 5. Laporan arus kas (metode langsung)                               */
+    /* ------------------------------------------------------------------ */
+    public function cashFlow(string $from, string $to): array
+    {
+        $openingDate = Carbon::parse($from)->subDay()->toDateString();
+        $opening = $this->balances($openingDate)[Account::KAS];
+
+        $flows = DB::table('journal_lines as l')
+            ->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')
+            ->join('accounts as a', 'a.id', '=', 'l.account_id')
+            ->where('a.account_code', Account::KAS)
+            ->whereBetween('e.entry_date', [$from, $to])
+            ->groupBy('e.reference_type')
+            ->selectRaw('e.reference_type, SUM(l.debit) - SUM(l.credit) as net')
+            ->pluck('net', 'reference_type');
+
+        $get = fn (string $type) => Money::of($flows[$type] ?? 0);
+
+        $operating = [
+            'sales_receipts' => $get(JournalEntry::REF_SALE),
+            'motorcycle_purchases' => $get(JournalEntry::REF_PURCHASE),
+            'vehicle_costs' => $get(JournalEntry::REF_VEHICLE_COST),
+            'operating_expenses' => $get(JournalEntry::REF_OPERATING_EXPENSE),
+        ];
+        $netOperating = array_reduce($operating, fn ($t, $v) => $t->plus($v), Money::of(0));
+        $netFinancing = $get(JournalEntry::REF_MANUAL);
+        $netChange = $netOperating->plus($netFinancing);
+
+        return [
+            'period' => ['from' => $from, 'to' => $to],
+            'operating' => array_map(fn ($v) => Money::str($v), $operating) + ['net' => Money::str($netOperating)],
+            'financing' => ['capital_contributions' => Money::str($netFinancing), 'net' => Money::str($netFinancing)],
+            'net_change' => Money::str($netChange),
+            'opening_cash' => Money::str($opening),
+            'closing_cash' => Money::str($opening->plus($netChange)),
+        ];
+    }
+
+    /**
+     * Saldo setiap akun (sesuai saldo normal) sampai $to, opsional mulai $from.
+     *
+     * @return array<string, \Brick\Math\BigDecimal> kunci = kode akun
+     */
+    public function balances(string $to, ?string $from = null): array
+    {
+        $rows = DB::table('accounts as a')
+            ->leftJoin('journal_lines as l', 'l.account_id', '=', 'a.id')
+            ->leftJoin('journal_entries as e', function ($join) use ($to, $from) {
+                $join->on('e.id', '=', 'l.journal_entry_id')->where('e.entry_date', '<=', $to);
+                if ($from) {
+                    $join->where('e.entry_date', '>=', $from);
+                }
+            })
+            ->groupBy('a.account_code', 'a.normal_balance')
+            ->selectRaw('a.account_code, a.normal_balance,
+                COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.debit END), 0) as debit,
+                COALESCE(SUM(CASE WHEN e.id IS NOT NULL THEN l.credit END), 0) as credit')
+            ->get();
+
+        $result = [];
+        foreach ($rows as $r) {
+            $debit = Money::of($r->debit);
+            $credit = Money::of($r->credit);
+            $result[$r->account_code] = $r->normal_balance === 'debit' ? $debit->minus($credit) : $credit->minus($debit);
+        }
+        foreach ([Account::KAS, Account::PERSEDIAAN, Account::MODAL, Account::PENDAPATAN, Account::HPP, Account::BEBAN_OPERASIONAL] as $code) {
+            $result[$code] ??= Money::of(0);
+        }
+
+        return $result;
+    }
+}

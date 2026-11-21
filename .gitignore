@@ -17,3 +17,8 @@ frontend/.env
 .vscode/
 .DS_Store
 Thumbs.db
+
+# File sementara hasil unduhan Colab di folder induk (salinan resmi ada di ml-service/models)
+/*.zip
+/metadata.json
+/xgb_skenario_b.joblib

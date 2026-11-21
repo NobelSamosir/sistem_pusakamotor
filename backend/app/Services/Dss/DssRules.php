@@ -1,0 +1,100 @@
+<?php
+
+namespace App\Services\Dss;
+
+use App\Services\Money;
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
+
+/**
+ * Aturan keputusan Tabel 3.10 dalam bentuk fungsi murni (tanpa database),
+ * sehingga mudah diuji dan dijelaskan di Bab 4.
+ */
+final class DssRules
+{
+    public const LAYAK = 'Layak dibeli';
+    public const MARGIN_TIPIS = 'Margin tipis';
+    public const TIDAK_DISARANKAN = 'Tidak disarankan';
+    public const BERISIKO_RUGI = 'Berisiko rugi';
+    public const DI_BAWAH_PASAR = 'Di bawah pasar';
+    public const SESUAI_PASAR = 'Sesuai pasar';
+    public const DI_ATAS_PASAR = 'Di atas pasar';
+
+    /**
+     * DSS pembelian. HB_maks = L / (1 + PL) - B_estimasi
+     *  - tawaran <= HB_maks                  -> Layak dibeli
+     *  - HB_maks < tawaran <= L - B_estimasi  -> Margin tipis (tawar sampai HB_maks)
+     *  - tawaran > L - B_estimasi             -> Tidak disarankan
+     */
+    public static function purchase(string $lower, string $markup, string $serviceCost, string $offer): array
+    {
+        $L = Money::of($lower);
+        $pl = BigDecimal::of($markup);
+        $b = Money::of($serviceCost);
+        $offerPrice = Money::of($offer);
+
+        $hbMax = $L->dividedBy(BigDecimal::one()->plus($pl), 2, RoundingMode::DOWN)->minus($b);
+        $lossLimit = $L->minus($b);
+
+        if (! $hbMax->isPositive()) {
+            $status = self::TIDAK_DISARANKAN;
+            $recommended = null;
+        } elseif ($offerPrice->isLessThanOrEqualTo($hbMax)) {
+            $status = self::LAYAK;
+            $recommended = $offerPrice;
+        } elseif ($offerPrice->isLessThanOrEqualTo($lossLimit)) {
+            $status = self::MARGIN_TIPIS;
+            $recommended = $hbMax;
+        } else {
+            $status = self::TIDAK_DISARANKAN;
+            $recommended = null;
+        }
+
+        // Perkiraan laba bila dibeli di harga rekomendasi dan laku di harga pasar terendah (L)
+        $profit = $recommended ? $L->minus($recommended)->minus($b) : null;
+
+        return [
+            'max_purchase_price' => Money::str($hbMax),
+            'loss_limit' => Money::str($lossLimit),
+            'decision_status' => $status,
+            'recommended_price' => $recommended ? Money::str($recommended) : null,
+            'expected_profit' => $profit ? Money::str($profit) : null,
+            'expected_margin' => $profit ? (string) $profit->dividedBy($L, 4, RoundingMode::HALF_UP) : null,
+        ];
+    }
+
+    /**
+     * DSS penjualan. HT = HPP x (1 + PL), urutan cek:
+     *  1. U < HPP      -> Berisiko rugi (tanpa rekomendasi otomatis)
+     *  2. HT < L       -> Di bawah pasar, rekomendasi L
+     *  3. L <= HT <= U -> Sesuai pasar, rekomendasi HT
+     *  4. HT > U       -> Di atas pasar, rekomendasi U
+     */
+    public static function sale(string $lower, string $upper, string $hpp, string $markup): array
+    {
+        $L = Money::of($lower);
+        $U = Money::of($upper);
+        $H = Money::of($hpp);
+        $ht = $H->multipliedBy(BigDecimal::one()->plus(BigDecimal::of($markup)))->toScale(2, RoundingMode::HALF_UP);
+
+        if ($U->isLessThan($H)) {
+            [$status, $rec] = [self::BERISIKO_RUGI, null];
+        } elseif ($ht->isLessThan($L)) {
+            [$status, $rec] = [self::DI_BAWAH_PASAR, $L];
+        } elseif ($ht->isLessThanOrEqualTo($U)) {
+            [$status, $rec] = [self::SESUAI_PASAR, $ht];
+        } else {
+            [$status, $rec] = [self::DI_ATAS_PASAR, $U];
+        }
+
+        $profit = $rec ? $rec->minus($H) : null;
+
+        return [
+            'target_price' => Money::str($ht),
+            'decision_status' => $status,
+            'recommended_price' => $rec ? Money::str($rec) : null,
+            'expected_profit' => $profit ? Money::str($profit) : null,
+            'expected_margin' => $profit ? (string) $profit->dividedBy($rec, 4, RoundingMode::HALF_UP) : null,
+        ];
+    }
+}
