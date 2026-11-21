@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+@layer base {
+  label { @apply text-sm font-medium text-slate-700; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .print-full { margin: 0 !important; padding: 0 !important; box-shadow: none !important; }
+  body { background: #fff; }
+}
