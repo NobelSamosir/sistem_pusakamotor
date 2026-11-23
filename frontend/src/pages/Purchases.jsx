@@ -40,7 +40,7 @@ export default function Purchases() {
 
   return (
     <div>
-      <PageHeader title="Pembelian Motor" subtitle="Menyimpan unit baru, pembelian, dan jurnal Persediaan / Kas sekaligus." />
+      <PageHeader title="Pembelian Motor" />
       {fromDss && (
         <Alert type="info">
           Data diisi dari hasil DSS beli ({fromDss.status}). Lengkapi nomor rangka, nomor mesin, dan pemasok, lalu simpan.

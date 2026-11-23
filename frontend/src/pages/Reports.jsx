@@ -31,6 +31,7 @@ const Signed = ({ label, value, bold }) => {
 
 function Stock({ d }) {
   return (
+    <div className="space-y-6">
     <Table
       columns={[
         { key: 'vehicle_code', label: 'Kode', render: (r) => <Link className="text-teal-700" to={`/motor/${r.id}`}>{r.vehicle_code}</Link> },
@@ -47,6 +48,25 @@ function Stock({ d }) {
       empty="Tidak ada motor di stok."
       footer={<tfoot><tr className="font-semibold"><td className="px-3 py-2" colSpan={8}>Total {d.total_units} unit</td><td className="px-3 py-2 text-right">{rupiah(d.total_hpp)}</td></tr></tfoot>}
     />
+    {d.consignments?.length > 0 && (
+      <div>
+        <h3 className="mb-1 font-semibold">Motor titipan di showroom ({d.consignments.length} unit)</h3>
+        <p className="mb-2 text-xs text-slate-500">Bukan persediaan showroom, tidak masuk nilai stok di atas.</p>
+        <Table
+          columns={[
+            { key: 'vehicle_code', label: 'Kode', render: (r) => <Link className="text-teal-700" to={`/motor/${r.id}`}>{r.vehicle_code}</Link> },
+            { key: 'unit', label: 'Unit' },
+            { key: 'frame_number', label: 'Nomor rangka' },
+            { key: 'consignor', label: 'Pemilik' },
+            { key: 'received_date', label: 'Diterima', render: (r) => tanggal(r.received_date) },
+            { key: 'status', label: 'Status' },
+            { key: 'consignor_price', label: 'Harga titipan', right: true, render: (r) => rupiah(r.consignor_price) },
+          ]}
+          rows={d.consignments}
+        />
+      </div>
+    )}
+    </div>
   )
 }
 
@@ -76,13 +96,14 @@ function PurchasesSales({ d }) {
             { key: 'sale_date', label: 'Tanggal', render: (r) => tanggal(r.sale_date) },
             { key: 'unit', label: 'Unit' },
             { key: 'customer_name', label: 'Pelanggan' },
+            { key: 'jenis', label: 'Jenis', render: (r) => [r.sale_type === 'kredit' ? `Kredit ${r.leasing_company || ''}`.trim() : 'Tunai', r.is_consignment && 'titipan'].filter(Boolean).join(' · ') },
             { key: 'sale_price', label: 'Harga jual', right: true, render: (r) => rupiah(r.sale_price) },
-            { key: 'hpp_amount', label: 'HPP', right: true, render: (r) => rupiah(r.hpp_amount) },
-            { key: 'gross_profit', label: 'Laba', right: true, render: (r) => rupiah(r.gross_profit) },
+            { key: 'hpp_amount', label: 'HPP / titipan', right: true, render: (r) => rupiah(r.is_consignment ? r.consignor_payable : r.hpp_amount) },
+            { key: 'gross_profit', label: 'Laba / komisi', right: true, render: (r) => rupiah(r.gross_profit) },
             { key: 'margin', label: 'Margin', right: true, render: (r) => persen(r.margin) },
           ]}
           rows={d.sales}
-          footer={<tfoot><tr className="font-semibold"><td className="px-3 py-2" colSpan={4}>Total penjualan</td><td className="px-3 py-2 text-right">{rupiah(d.totals.sale_amount)}</td><td className="px-3 py-2 text-right">{rupiah(d.totals.hpp_amount)}</td><td className="px-3 py-2 text-right">{rupiah(d.totals.gross_profit)}</td><td /></tr></tfoot>}
+          footer={<tfoot><tr className="font-semibold"><td className="px-3 py-2" colSpan={5}>Total penjualan</td><td className="px-3 py-2 text-right">{rupiah(d.totals.sale_amount)}</td><td className="px-3 py-2 text-right">{rupiah(d.totals.hpp_amount)}</td><td className="px-3 py-2 text-right">{rupiah(d.totals.gross_profit)}</td><td /></tr></tfoot>}
         />
       </div>
     </div>
@@ -95,6 +116,12 @@ function Income({ d }) {
       <Line label="Pendapatan penjualan kendaraan" value={d.revenue} bold />
       <Line label="Harga pokok penjualan (HPP)" value={d.cogs} indent negative />
       <Line label="Laba kotor" value={d.gross_profit} bold />
+      <h4 className="mt-3 text-sm font-semibold text-slate-700">Pendapatan lain</h4>
+      <Line label="Komisi leasing" value={d.other_income?.leasing_commission} indent />
+      <Line label="Komisi titip jual" value={d.other_income?.consignment_commission} indent />
+      <Line label="Jasa pengurusan surat" value={d.other_income?.document_service} indent />
+      <Line label="Pendapatan lain-lain (uang muka hangus)" value={d.other_income?.other} indent />
+      <Line label="Total pendapatan lain" value={d.other_income?.total} bold />
       <Line label="Beban operasional" value={d.operating_expense} indent negative />
       <div className="mt-2 flex justify-between rounded-lg bg-teal-50 px-3 py-3 font-semibold text-teal-900">
         <span>Laba bersih</span><span className="tabular-nums">{rupiah(d.net_profit)}</span>
@@ -110,18 +137,26 @@ function Balance({ d }) {
         <div>
           <h3 className="mb-2 font-semibold">Aset</h3>
           <Line label="Kas" value={d.assets.cash} indent />
+          <Line label="Piutang perusahaan pembiayaan" value={d.assets.leasing_receivable} indent />
           <Line label="Persediaan kendaraan" value={d.assets.inventory} indent />
+          <Line label="Perlengkapan" value={d.assets.supplies} indent />
           <Line label="Total aset" value={d.assets.total} bold />
         </div>
         <div>
-          <h3 className="mb-2 font-semibold">Ekuitas</h3>
+          <h3 className="mb-2 font-semibold">Kewajiban</h3>
+          <Line label="Uang muka pelanggan" value={d.liabilities?.customer_deposits} indent />
+          <Line label="Utang konsinyasi (titip jual)" value={d.liabilities?.consignment_payable} indent />
+          <Line label="Total kewajiban" value={d.liabilities?.total} bold />
+          <h3 className="mb-2 mt-5 font-semibold">Ekuitas</h3>
           <Line label="Modal pemilik" value={d.equity.capital} indent />
+          <Line label="Prive pemilik" value={d.equity.prive} indent negative />
           <Line label="Laba ditahan / periode berjalan" value={d.equity.retained_profit} indent />
           <Line label="Total ekuitas" value={d.equity.total} bold />
+          <Line label="Total kewajiban dan ekuitas" value={d.liabilities_and_equity} bold />
         </div>
       </div>
       <p className={`mt-4 rounded-lg px-3 py-2 text-sm font-medium ${d.is_balanced ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-        {d.is_balanced ? 'Seimbang: total aset sama dengan total ekuitas.' : 'Tidak seimbang, periksa jurnal.'}
+        {d.is_balanced ? 'Seimbang: total aset sama dengan total kewajiban dan ekuitas.' : 'Tidak seimbang, periksa jurnal.'}
       </p>
     </div>
   )
@@ -131,13 +166,20 @@ function CashFlow({ d }) {
   return (
     <div className="max-w-xl">
       <h3 className="mb-1 font-semibold">Arus kas dari aktivitas operasi</h3>
-      <Signed label="Penerimaan dari penjualan motor" value={d.operating.sales_receipts} />
+      <Signed label="Penerimaan dari penjualan motor (tunai dan DP)" value={d.operating.sales_receipts} />
+      <Signed label="Pencairan dana dari leasing" value={d.operating.leasing_disbursements} />
+      <Signed label="Penerimaan komisi leasing" value={d.operating.leasing_commissions} />
+      <Signed label="Penerimaan upah jasa pengurusan surat" value={d.operating.document_services} />
+      <Signed label="Uang muka pelanggan (bersih)" value={d.operating.customer_deposits} />
+      <Signed label="Pembayaran ke pemilik motor titipan" value={d.operating.consignment_payouts} />
       <Signed label="Pembayaran pembelian motor" value={d.operating.motorcycle_purchases} />
       <Signed label="Pembayaran biaya kendaraan" value={d.operating.vehicle_costs} />
+      <Signed label="Pembelian perlengkapan" value={d.operating.supply_purchases} />
       <Signed label="Pembayaran beban operasional" value={d.operating.operating_expenses} />
       <Signed label="Arus kas bersih aktivitas operasi" value={d.operating.net} bold />
       <h3 className="mb-1 mt-5 font-semibold">Arus kas dari aktivitas pendanaan</h3>
       <Signed label="Setoran modal pemilik" value={d.financing.capital_contributions} />
+      <Signed label="Pengambilan pribadi (prive)" value={d.financing.owner_withdrawals} />
       <Signed label="Arus kas bersih aktivitas pendanaan" value={d.financing.net} bold />
       <div className="mt-5" />
       <Signed label="Kenaikan (penurunan) kas" value={d.net_change} bold />
@@ -156,12 +198,15 @@ export default function Reports() {
   const [date, setDate] = useState(today())
   const params = tab === 'balance-sheet' ? { date } : tab === 'stock' ? {} : { from, to }
   const { data, loading, error } = useFetch(`/reports/${tab}`, params)
+  // Saat tab berganti, render pertama masih membawa data tab lama: tunggu sampai bentuk datanya cocok.
+  const shape = { stock: 'items', 'purchases-sales': 'totals', 'income-statement': 'revenue', 'balance-sheet': 'assets', 'cash-flow': 'operating' }
+  const ready = data && data[shape[tab]] !== undefined
   const title = tabs.find((t) => t.value === tab).label
   const periode = tab === 'balance-sheet' ? `Per ${tanggal(date)}` : tab === 'stock' ? `Per ${tanggal(today())}` : `Periode ${tanggal(from)} sampai ${tanggal(to)}`
 
   return (
     <div>
-      <PageHeader title="Laporan" subtitle="Semua laporan keuangan dihitung dari jurnal umum." actions={<Button variant="secondary" onClick={() => window.print()}>Cetak / simpan PDF</Button>} />
+      <PageHeader title="Laporan Keuangan" actions={<Button variant="secondary" onClick={() => window.print()}>Cetak / simpan PDF</Button>} />
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
       <Card>
         <div className="no-print mb-5 flex flex-wrap items-end gap-3">
@@ -179,7 +224,7 @@ export default function Reports() {
           <p className="text-sm text-slate-500">{periode}</p>
         </div>
         <Alert>{error}</Alert>
-        {loading || !data ? <Loading /> : (
+        {loading || !ready ? <Loading /> : (
           <>
             {tab === 'stock' && <Stock d={data} />}
             {tab === 'purchases-sales' && <PurchasesSales d={data} />}

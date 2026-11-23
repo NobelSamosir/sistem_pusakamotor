@@ -25,7 +25,7 @@ export default function Predict() {
 
   return (
     <div>
-      <PageHeader title="Prediksi Harga Pasar" subtitle="Range harga dari model XGBoost skenario B: L = prediksi - MAE, U = prediksi + MAE." />
+      <PageHeader title="Prediksi Harga Pasar" />
       <Card>
         <Alert>{error}</Alert>
         <form onSubmit={submit}>

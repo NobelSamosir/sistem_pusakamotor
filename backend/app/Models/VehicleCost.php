@@ -9,7 +9,7 @@ class VehicleCost extends Model
 {
     protected $fillable = [
         'motorcycle_id', 'user_id', 'cost_date', 'cost_category',
-        'description', 'amount', 'hpp_included',
+        'description', 'amount', 'hpp_included', 'source',
     ];
 
     protected function casts(): array

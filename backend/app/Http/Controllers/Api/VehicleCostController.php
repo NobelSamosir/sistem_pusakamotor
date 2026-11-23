@@ -31,6 +31,7 @@ class VehicleCostController extends Controller
             'cost_category' => ['required', 'in:servis,sparepart,cat_body,administrasi,lainnya'],
             'description' => ['nullable', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'gt:0'],
+            'source' => ['nullable', 'in:kas,perlengkapan'],
             'hpp_included' => ['required', 'boolean'],
         ]);
 

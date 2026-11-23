@@ -13,6 +13,13 @@ class JournalEntry extends Model
     public const REF_SALE = 'sale';
     public const REF_OPERATING_EXPENSE = 'operating_expense';
     public const REF_MANUAL = 'manual';
+    public const REF_PRIVE = 'prive';
+    public const REF_LEASING_DISBURSEMENT = 'leasing_disbursement';
+    public const REF_LEASING_COMMISSION = 'leasing_commission';
+    public const REF_DEPOSIT = 'deposit';
+    public const REF_CONSIGNMENT_PAYOUT = 'consignment_payout';
+    public const REF_SUPPLY_PURCHASE = 'supply_purchase';
+    public const REF_DOCUMENT_SERVICE = 'document_service';
 
     protected $fillable = ['journal_number', 'entry_date', 'description', 'reference_type', 'reference_id', 'user_id'];
 

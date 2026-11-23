@@ -150,7 +150,7 @@ export default function Recommend() {
   const tab = params.get('tab') || 'beli'
   return (
     <div>
-      <PageHeader title="Rekomendasi Harga" subtitle="DSS menggabungkan range harga pasar dari model dengan HPP dan target laba." />
+      <PageHeader title="Rekomendasi Harga" />
       <Tabs tabs={[{ value: 'beli', label: 'Harga beli' }, { value: 'jual', label: 'Harga jual' }]} value={tab} onChange={(v) => setParams({ tab: v })} />
       {tab === 'beli' ? <Beli /> : <Jual initialMotor={params.get('motor')} />}
     </div>

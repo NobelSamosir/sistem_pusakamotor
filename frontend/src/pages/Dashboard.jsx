@@ -20,18 +20,28 @@ export default function Dashboard() {
   const status = [
     { name: 'Tersedia', value: d.motorcycles.tersedia, color: '#0f766e' },
     { name: 'Perbaikan', value: d.motorcycles.perbaikan, color: '#d97706' },
+    { name: 'Dipesan', value: d.motorcycles.dipesan || 0, color: '#0284c7' },
     { name: 'Terjual', value: d.motorcycles.terjual, color: '#94a3b8' },
   ].filter((s) => s.value > 0)
 
   return (
     <div>
-      <PageHeader title="Dashboard" subtitle={`Ringkasan bulan ${bulan[Number(d.month.slice(5)) - 1]} ${d.month.slice(0, 4)}`} />
+      <PageHeader title="Dashboard" />
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard label="Total motor" value={d.motorcycles.total} note={`${d.motorcycles.tersedia} tersedia di stok`} />
         <StatCard label="Pembelian bulan ini" value={rupiah(d.this_month.purchase_amount)} note={`${d.this_month.purchase_units} unit`} tone="sky" />
         <StatCard label="Penjualan bulan ini" value={rupiah(d.this_month.sale_amount)} note={`${d.this_month.sale_units} unit`} tone="emerald" />
         <StatCard label="Laba bersih bulan ini" value={rupiah(d.this_month.net_profit)} note="dari laporan laba rugi" tone="amber" />
       </div>
+
+      {d.outstanding && (
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Kas" value={rupiah(d.outstanding.cash)} note={`Perlengkapan ${rupiah(d.outstanding.supplies)}`} tone="emerald" />
+          <StatCard label="Piutang leasing" value={rupiah(d.outstanding.leasing_receivable)} note={`${d.outstanding.leasing_waiting} transaksi menunggu cair`} tone="sky" />
+          <StatCard label="Uang muka pelanggan" value={rupiah(d.outstanding.customer_deposits)} note={`${d.motorcycles.dipesan || 0} unit dipesan`} tone="amber" />
+          <StatCard label="Utang ke penitip" value={rupiah(d.outstanding.consignment_payable)} note={`${d.motorcycles.titipan_di_showroom || 0} unit titipan di showroom`} tone="violet" />
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Card title="Penjualan dan pembelian 12 bulan terakhir" className="lg:col-span-2">

@@ -53,8 +53,8 @@ class DssService
     /** DSS penjualan (motor sudah di stok, HPP dari SIA). */
     public function sale(Motorcycle $motorcycle, string $markup, ?int $userId = null): PriceRecommendation
     {
-        if ($motorcycle->isSold()) {
-            throw new BusinessRuleException('Motor sudah terjual, rekomendasi harga jual tidak diperlukan.');
+        if (! $motorcycle->isInShowroom()) {
+            throw new BusinessRuleException("Rekomendasi harga jual hanya untuk motor yang masih di showroom (status: {$motorcycle->status}).");
         }
 
         return DB::transaction(function () use ($motorcycle, $markup, $userId) {

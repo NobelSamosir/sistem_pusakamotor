@@ -13,6 +13,11 @@ class HppService
 {
     public function forMotorcycle(Motorcycle $motorcycle): BigDecimal
     {
+        // Motor titipan: dasar biaya = harga bersih yang dijanjikan kepada penitip
+        if ($motorcycle->isConsignment()) {
+            return Money::of($motorcycle->consignment()->value('consignor_price'));
+        }
+
         $purchasePrice = Money::of($motorcycle->purchase()->value('purchase_price'));
         $costs = Money::of($motorcycle->costs()->where('hpp_included', true)->sum('amount'));
 

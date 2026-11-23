@@ -21,6 +21,8 @@ class MotorcycleController extends Controller
         $items = Motorcycle::with(['purchase:id,motorcycle_id,purchase_date,purchase_price'])
             ->when($request->query('status'), fn ($s, $v) => $s->where('status', $v))
             ->when($request->query('brand'), fn ($s, $v) => $s->where('brand', $v))
+            ->when($request->query('ownership_type'), fn ($s, $v) => $s->where('ownership_type', $v))
+            ->when($request->boolean('in_showroom'), fn ($s) => $s->whereIn('status', Motorcycle::STATUS_DI_SHOWROOM))
             ->when($q, fn ($s) => $s->where(fn ($w) => $w
                 ->where('frame_number', 'ilike', "%{$q}%")
                 ->orWhere('engine_number', 'ilike', "%{$q}%")
@@ -40,6 +42,8 @@ class MotorcycleController extends Controller
             'purchase.supplier',
             'costs' => fn ($q) => $q->orderBy('cost_date'),
             'sale.customer',
+            'consignment.consignor',
+            'deposits.customer',
             'predictions' => fn ($q) => $q->latest()->limit(10),
             'recommendations' => fn ($q) => $q->latest()->limit(10),
         ]);
@@ -54,8 +58,8 @@ class MotorcycleController extends Controller
     /** Ubah data unit (hanya unit yang belum terjual). */
     public function update(Request $request, Motorcycle $motorcycle): JsonResponse
     {
-        if ($motorcycle->isSold()) {
-            throw new BusinessRuleException('Data motor yang sudah terjual tidak bisa diubah.');
+        if (! $motorcycle->isInShowroom()) {
+            throw new BusinessRuleException('Data motor yang sudah terjual atau dikembalikan tidak bisa diubah.');
         }
 
         foreach (['frame_number', 'engine_number'] as $field) {
@@ -69,6 +73,7 @@ class MotorcycleController extends Controller
 
         $data = $request->validate($rules + [
             'status' => ['sometimes', Rule::in([Motorcycle::STATUS_TERSEDIA, Motorcycle::STATUS_PERBAIKAN])],
+            'ownership_type' => ['prohibited'],
         ]);
 
         $motorcycle->update($data);

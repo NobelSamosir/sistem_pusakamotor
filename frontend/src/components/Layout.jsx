@@ -5,8 +5,9 @@ import useFetch from '../lib/useFetch'
 const menu = [
   { group: 'Utama', items: [['/', 'Dashboard'], ['/motor', 'Data Motor']] },
   { group: 'Transaksi', items: [['/pembelian', 'Pembelian'], ['/biaya', 'Biaya Kendaraan'], ['/penjualan', 'Penjualan'], ['/beban', 'Beban Operasional']] },
+  { group: 'Transaksi lain', items: [['/uang-muka', 'Uang Muka'], ['/leasing', 'Kredit Leasing'], ['/titip-jual', 'Titip Jual'], ['/perlengkapan', 'Perlengkapan'], ['/jasa-surat', 'Jasa Surat']] },
   { group: 'DSS', items: [['/prediksi', 'Prediksi Harga'], ['/rekomendasi', 'Rekomendasi Harga']] },
-  { group: 'Akuntansi', items: [['/laporan', 'Laporan'], ['/jurnal', 'Jurnal Umum']] },
+  { group: 'Akuntansi', items: [['/laporan', 'Laporan Keuangan'], ['/jurnal', 'Jurnal, Modal, Prive']] },
   { group: 'Lainnya', items: [['/master', 'Data Master']] },
 ]
 
@@ -27,7 +28,7 @@ export default function Layout() {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600 text-sm font-bold text-white">PM</div>
           <div>
             <p className="font-semibold text-white">Pusaka Motor</p>
-            <p className="text-xs text-slate-400">SIA dan DSS</p>
+            <p className="text-xs text-slate-400">Jual Beli Motor Bekas</p>
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 pb-4">

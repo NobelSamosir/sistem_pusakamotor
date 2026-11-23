@@ -21,6 +21,7 @@ class DashboardService
             ->selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status');
 
         $income = $this->reports->incomeStatement($monthStart, $monthEnd);
+        $balance = $this->reports->balanceSheet($now->toDateString());
 
         // Grafik 12 bulan terakhir
         $start = $now->copy()->startOfMonth()->subMonths(11)->toDateString();
@@ -49,7 +50,17 @@ class DashboardService
                 'total' => (int) $statusCounts->sum(),
                 'tersedia' => (int) ($statusCounts[Motorcycle::STATUS_TERSEDIA] ?? 0),
                 'perbaikan' => (int) ($statusCounts[Motorcycle::STATUS_PERBAIKAN] ?? 0),
+                'dipesan' => (int) ($statusCounts[Motorcycle::STATUS_DIPESAN] ?? 0),
                 'terjual' => (int) ($statusCounts[Motorcycle::STATUS_TERJUAL] ?? 0),
+                'titipan_di_showroom' => DB::table('consignments')->where('status', 'dititipkan')->count(),
+            ],
+            'outstanding' => [
+                'leasing_receivable' => $balance['assets']['leasing_receivable'],
+                'leasing_waiting' => DB::table('sales')->where('disbursement_status', 'menunggu')->count(),
+                'customer_deposits' => $balance['liabilities']['customer_deposits'],
+                'consignment_payable' => $balance['liabilities']['consignment_payable'],
+                'cash' => $balance['assets']['cash'],
+                'supplies' => $balance['assets']['supplies'],
             ],
             'this_month' => [
                 'purchase_units' => DB::table('purchases')->whereBetween('purchase_date', [$monthStart, $monthEnd])->count(),

@@ -9,7 +9,7 @@ function Party({ type }) {
   const nameKey = isSup ? 'supplier_name' : 'customer_name'
   const typeKey = isSup ? 'supplier_type' : 'customer_type'
   const empty = { [nameKey]: '', [typeKey]: 'perorangan', phone: '', address: '' }
-  const { data, reload } = useFetch(url)
+  const { data, reload, error: loadError } = useFetch(url)
   const [form, setForm] = useState(empty)
   const [editId, setEditId] = useState(null)
   const [error, setError] = useState('')
@@ -43,6 +43,7 @@ function Party({ type }) {
         </form>
       </Card>
       <Card className="lg:col-span-2">
+        <Alert>{loadError}</Alert>
         <Table
           columns={[
             { key: nameKey, label: 'Nama' },
@@ -55,7 +56,7 @@ function Party({ type }) {
               </div>
             ) },
           ]}
-          rows={data}
+          rows={Array.isArray(data) ? data : []}
         />
       </Card>
     </div>
@@ -63,9 +64,11 @@ function Party({ type }) {
 }
 
 function Accounts() {
-  const { data } = useFetch('/accounts')
+  const { data, loading, error, reload } = useFetch('/accounts')
   return (
-    <Card title="Bagan akun (Tabel 3.8)">
+    <Card title="Bagan akun" actions={<Button variant="secondary" onClick={reload}>Muat ulang</Button>}>
+      <Alert>{error}</Alert>
+      {loading && <p className="mb-2 text-sm text-slate-400">Memuat...</p>}
       <Table
         columns={[
           { key: 'account_code', label: 'Kode' },
@@ -73,7 +76,7 @@ function Accounts() {
           { key: 'account_type', label: 'Jenis' },
           { key: 'normal_balance', label: 'Saldo normal' },
         ]}
-        rows={data}
+        rows={Array.isArray(data) ? data : []}
       />
     </Card>
   )

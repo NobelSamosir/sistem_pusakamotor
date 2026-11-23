@@ -14,6 +14,11 @@ import Recommend from './pages/Recommend'
 import Reports from './pages/Reports'
 import Journals from './pages/Journals'
 import Master from './pages/Master'
+import Deposits from './pages/Deposits'
+import Consignments from './pages/Consignments'
+import Leasing from './pages/Leasing'
+import Supplies from './pages/Supplies'
+import DocumentServices from './pages/DocumentServices'
 
 function Protected({ children }) {
   const { user } = useAuth()
@@ -37,6 +42,11 @@ export default function App() {
         <Route path="laporan" element={<Reports />} />
         <Route path="jurnal" element={<Journals />} />
         <Route path="master" element={<Master />} />
+        <Route path="uang-muka" element={<Deposits />} />
+        <Route path="titip-jual" element={<Consignments />} />
+        <Route path="leasing" element={<Leasing />} />
+        <Route path="perlengkapan" element={<Supplies />} />
+        <Route path="jasa-surat" element={<DocumentServices />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

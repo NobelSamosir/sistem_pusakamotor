@@ -25,9 +25,10 @@ class OperatingExpenseController extends Controller
     {
         $data = $request->validate([
             'expense_date' => ['required', 'date'],
-            'category' => ['required', 'in:listrik,gaji,sewa,iklan,lainnya'],
+            'category' => ['required', 'in:listrik,gaji,sewa,iklan,kebersihan,lainnya'],
             'description' => ['nullable', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'gt:0'],
+            'source' => ['nullable', 'in:kas,perlengkapan'],
         ]);
 
         return response()->json($service->create($data, $request->user()->id), 201);

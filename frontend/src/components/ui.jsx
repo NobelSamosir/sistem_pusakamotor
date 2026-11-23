@@ -131,6 +131,18 @@ const badgeCls = {
   tersedia: 'bg-emerald-100 text-emerald-700',
   perbaikan: 'bg-amber-100 text-amber-700',
   terjual: 'bg-slate-200 text-slate-600',
+  dipesan: 'bg-sky-100 text-sky-700',
+  dikembalikan: 'bg-slate-100 text-slate-500',
+  aktif: 'bg-sky-100 text-sky-700',
+  dipakai: 'bg-emerald-100 text-emerald-700',
+  hangus: 'bg-rose-100 text-rose-700',
+  dititipkan: 'bg-violet-100 text-violet-700',
+  titipan: 'bg-violet-100 text-violet-700',
+  lunas: 'bg-emerald-100 text-emerald-700',
+  menunggu: 'bg-amber-100 text-amber-800',
+  cair: 'bg-emerald-100 text-emerald-700',
+  kredit: 'bg-sky-100 text-sky-700',
+  tunai: 'bg-slate-100 text-slate-600',
   'Layak dibeli': 'bg-emerald-100 text-emerald-700',
   'Sesuai pasar': 'bg-emerald-100 text-emerald-700',
   'Margin tipis': 'bg-amber-100 text-amber-800',
@@ -148,7 +160,8 @@ export function Badge({ children }) {
   )
 }
 
-export function Table({ columns, rows, empty = 'Belum ada data.', footer }) {
+export function Table({ columns, rows: rawRows, empty = 'Belum ada data.', footer }) {
+  const rows = Array.isArray(rawRows) ? rawRows : []
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -213,7 +226,7 @@ export function Pagination({ meta, onPage }) {
 }
 
 export function StatCard({ label, value, note, tone = 'teal' }) {
-  const tones = { teal: 'text-teal-700', sky: 'text-sky-700', amber: 'text-amber-700', emerald: 'text-emerald-700' }
+  const tones = { teal: 'text-teal-700', sky: 'text-sky-700', amber: 'text-amber-700', emerald: 'text-emerald-700', violet: 'text-violet-700', rose: 'text-rose-700' }
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-sm text-slate-500">{label}</p>
@@ -233,3 +246,9 @@ export function useFlash(ms = 4000) {
   }, [msg, ms])
   return [msg, setMsg]
 }
+
+/** Pilihan sumber dana biaya: kas atau stok perlengkapan. */
+export const sumberOptions = [
+  { value: 'kas', label: 'Kas (bayar tunai)' },
+  { value: 'perlengkapan', label: 'Stok perlengkapan' },
+]

@@ -2,16 +2,21 @@
 
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ConsignmentController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DepositController;
+use App\Http\Controllers\Api\DocumentServiceController;
 use App\Http\Controllers\Api\DssController;
 use App\Http\Controllers\Api\JournalController;
+use App\Http\Controllers\Api\LeasingController;
 use App\Http\Controllers\Api\MotorcycleController;
 use App\Http\Controllers\Api\OperatingExpenseController;
 use App\Http\Controllers\Api\PurchaseController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\SupplierController;
+use App\Http\Controllers\Api\SupplyController;
 use App\Http\Controllers\Api\VehicleCostController;
 use Illuminate\Support\Facades\Route;
 
@@ -50,9 +55,35 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/operating-expenses', [OperatingExpenseController::class, 'index']);
     Route::post('/operating-expenses', [OperatingExpenseController::class, 'store']);
 
+    // Penjualan kredit (leasing)
+    Route::get('/leasing', [LeasingController::class, 'index']);
+    Route::post('/leasing/{sale}/disburse', [LeasingController::class, 'disburse']);
+    Route::post('/leasing/{sale}/commission', [LeasingController::class, 'commission']);
+
+    // Uang muka / tanda jadi pelanggan
+    Route::get('/deposits', [DepositController::class, 'index']);
+    Route::post('/deposits', [DepositController::class, 'store']);
+    Route::post('/deposits/{deposit}/refund', [DepositController::class, 'refund']);
+    Route::post('/deposits/{deposit}/forfeit', [DepositController::class, 'forfeit']);
+
+    // Titip jual (konsinyasi)
+    Route::get('/consignments', [ConsignmentController::class, 'index']);
+    Route::post('/consignments', [ConsignmentController::class, 'store']);
+    Route::post('/consignments/{consignment}/return', [ConsignmentController::class, 'returnToOwner']);
+    Route::post('/consignments/{consignment}/payout', [ConsignmentController::class, 'payout']);
+
+    // Jasa pengurusan surat (STNK, pajak, balik nama)
+    Route::get('/document-services', [DocumentServiceController::class, 'index']);
+    Route::post('/document-services', [DocumentServiceController::class, 'store']);
+
+    // Perlengkapan (bahan habis pakai)
+    Route::get('/supplies', [SupplyController::class, 'index']);
+    Route::post('/supplies', [SupplyController::class, 'store']);
+
     // Jurnal
     Route::get('/journals', [JournalController::class, 'index']);
     Route::post('/journals/capital', [JournalController::class, 'storeCapital']);
+    Route::post('/journals/withdrawal', [JournalController::class, 'storeWithdrawal']);
 
     // Prediksi harga dan DSS (RM 3)
     Route::get('/ml/options', [DssController::class, 'options']);

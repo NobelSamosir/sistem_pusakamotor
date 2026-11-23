@@ -4,7 +4,7 @@ import useFetch from '../lib/useFetch'
 import { Button, Select } from './ui'
 
 /** Pilih pemasok/pelanggan, dengan tombol tambah cepat tanpa pindah halaman. */
-export default function PartyPicker({ type, value, onChange }) {
+export default function PartyPicker({ type, value, onChange, label, required = true }) {
   const isSupplier = type === 'supplier'
   const url = isSupplier ? '/suppliers' : '/customers'
   const nameKey = isSupplier ? 'supplier_name' : 'customer_name'
@@ -29,11 +29,11 @@ export default function PartyPicker({ type, value, onChange }) {
       <div className="flex items-end gap-2">
         <Select
           className="flex-1"
-          label={isSupplier ? 'Pemasok (penjual motor)' : 'Pelanggan (pembeli)'}
+          label={label || (isSupplier ? 'Pemasok (penjual motor)' : 'Pelanggan (pembeli)')}
           options={(data || []).map((p) => ({ value: String(p.id), label: p[nameKey] + (p.phone ? ` · ${p.phone}` : '') }))}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          required
+          required={required}
         />
         <Button type="button" variant="secondary" onClick={() => setAdding(!adding)}>{adding ? 'Batal' : '+ Baru'}</Button>
       </div>

@@ -40,4 +40,23 @@ class JournalController extends Controller
 
         return response()->json($entry->load('lines.account'), 201);
     }
+
+    /** Prive: pengambilan uang pribadi pemilik, Dr Prive / Cr Kas. */
+    public function storeWithdrawal(Request $request, CapitalService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'entry_date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'description' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $entry = $service->withdraw(
+            $data['entry_date'],
+            $data['amount'],
+            $data['description'] ?? 'Pengambilan pribadi pemilik (prive)',
+            $request->user()->id,
+        );
+
+        return response()->json($entry->load('lines.account'), 201);
+    }
 }

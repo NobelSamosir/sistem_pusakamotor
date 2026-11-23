@@ -4,7 +4,11 @@ import useFetch from '../lib/useFetch'
 import { monthEnd, monthStart, rupiah, tanggal, today } from '../lib/format'
 import { Alert, Button, Card, Input, Loading, MoneyInput, PageHeader, Pagination, useFlash } from '../components/ui'
 
-const ref = { purchase: 'Pembelian', vehicle_cost: 'Biaya kendaraan', sale: 'Penjualan', operating_expense: 'Beban', manual: 'Manual' }
+const ref = {
+  purchase: 'Pembelian', vehicle_cost: 'Biaya kendaraan', sale: 'Penjualan', operating_expense: 'Beban', manual: 'Setoran modal',
+  prive: 'Prive', leasing_disbursement: 'Pencairan leasing', leasing_commission: 'Komisi leasing', deposit: 'Uang muka',
+  consignment_payout: 'Pelunasan titipan', supply_purchase: 'Pembelian perlengkapan', document_service: 'Jasa surat',
+}
 
 export default function Journals() {
   const [from, setFrom] = useState(monthStart())
@@ -12,6 +16,7 @@ export default function Journals() {
   const [page, setPage] = useState(1)
   const list = useFetch('/journals', { from, to, page })
   const [cap, setCap] = useState({ entry_date: today(), amount: '', description: 'Setoran modal pemilik' })
+  const [prv, setPrv] = useState({ entry_date: today(), amount: '', description: 'Pengambilan pribadi pemilik' })
   const [error, setError] = useState('')
   const [ok, setOk] = useFlash()
 
@@ -24,16 +29,27 @@ export default function Journals() {
     } catch (err) { setError(errorMessage(err)) }
   }
 
+  const saveWithdrawal = async (e) => {
+    e.preventDefault(); setError('')
+    if (!window.confirm('Catat pengambilan uang pribadi pemilik? Kas akan berkurang.')) return
+    try {
+      await api.post('/journals/withdrawal', prv)
+      setOk('Prive tercatat: Prive Pemilik (debit) / Kas (kredit).')
+      setPrv({ ...prv, amount: '' }); list.reload()
+    } catch (err) { setError(errorMessage(err)) }
+  }
+
   const entries = list.data?.data || []
   const totalD = entries.flatMap((e) => e.lines).reduce((t, l) => t + Number(l.debit), 0)
   const totalK = entries.flatMap((e) => e.lines).reduce((t, l) => t + Number(l.credit), 0)
 
   return (
     <div>
-      <PageHeader title="Jurnal Umum" subtitle="Jurnal dibuat otomatis oleh setiap transaksi. Jurnal manual hanya untuk setoran modal." />
-      <Card title="Setoran modal (jurnal manual)">
-        <Alert>{error}</Alert>
-        <Alert type="success">{ok}</Alert>
+      <PageHeader title="Jurnal Umum" />
+      <Alert>{error}</Alert>
+      <Alert type="success">{ok}</Alert>
+      <div className="grid gap-6 xl:grid-cols-2">
+      <Card title="Setoran modal pemilik">
         <form onSubmit={saveCapital} className="grid gap-4 md:grid-cols-4">
           <Input label="Tanggal" type="date" value={cap.entry_date} onChange={(e) => setCap({ ...cap, entry_date: e.target.value })} required />
           <MoneyInput label="Nominal" value={cap.amount} onChange={(v) => setCap({ ...cap, amount: v })} required />
@@ -41,6 +57,15 @@ export default function Journals() {
           <div className="flex items-end"><Button className="w-full">Catat setoran</Button></div>
         </form>
       </Card>
+      <Card title="Prive (pemilik mengambil uang pribadi)">
+        <form onSubmit={saveWithdrawal} className="grid gap-4 md:grid-cols-4">
+          <Input label="Tanggal" type="date" value={prv.entry_date} onChange={(e) => setPrv({ ...prv, entry_date: e.target.value })} required />
+          <MoneyInput label="Nominal" value={prv.amount} onChange={(v) => setPrv({ ...prv, amount: v })} required />
+          <Input label="Keterangan" value={prv.description} onChange={(e) => setPrv({ ...prv, description: e.target.value })} />
+          <div className="flex items-end"><Button variant="danger" className="w-full">Catat prive</Button></div>
+        </form>
+      </Card>
+      </div>
       <Card title="Daftar jurnal" className="mt-6">
         <div className="mb-4 flex gap-3">
           <Input label="Dari" type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1) }} />
