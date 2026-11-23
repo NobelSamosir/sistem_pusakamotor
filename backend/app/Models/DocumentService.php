@@ -5,10 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** Jasa pengurusan surat kendaraan: perpanjang STNK, pajak, balik nama, mutasi. */
+/** Pendapatan di luar jual beli motor: pengurusan surat, pengantaran pinjaman, bonus tahunan leasing. */
 class DocumentService extends Model
 {
-    public const TYPES = ['perpanjang_stnk', 'pajak_tahunan', 'balik_nama', 'mutasi', 'lainnya'];
+    public const TYPES = ['perpanjang_stnk', 'pajak_tahunan', 'balik_nama', 'mutasi', 'pengantaran_pinjaman', 'bonus_leasing', 'lainnya'];
 
     protected $fillable = ['service_number', 'customer_id', 'user_id', 'service_date', 'service_type',
         'license_plate', 'description', 'amount_received', 'amount_paid', 'fee'];

@@ -48,24 +48,6 @@ function Stock({ d }) {
       empty="Tidak ada motor di stok."
       footer={<tfoot><tr className="font-semibold"><td className="px-3 py-2" colSpan={8}>Total {d.total_units} unit</td><td className="px-3 py-2 text-right">{rupiah(d.total_hpp)}</td></tr></tfoot>}
     />
-    {d.consignments?.length > 0 && (
-      <div>
-        <h3 className="mb-1 font-semibold">Motor titipan di showroom ({d.consignments.length} unit)</h3>
-        <p className="mb-2 text-xs text-slate-500">Bukan persediaan showroom, tidak masuk nilai stok di atas.</p>
-        <Table
-          columns={[
-            { key: 'vehicle_code', label: 'Kode', render: (r) => <Link className="text-teal-700" to={`/motor/${r.id}`}>{r.vehicle_code}</Link> },
-            { key: 'unit', label: 'Unit' },
-            { key: 'frame_number', label: 'Nomor rangka' },
-            { key: 'consignor', label: 'Pemilik' },
-            { key: 'received_date', label: 'Diterima', render: (r) => tanggal(r.received_date) },
-            { key: 'status', label: 'Status' },
-            { key: 'consignor_price', label: 'Harga titipan', right: true, render: (r) => rupiah(r.consignor_price) },
-          ]}
-          rows={d.consignments}
-        />
-      </div>
-    )}
     </div>
   )
 }
@@ -81,11 +63,12 @@ function PurchasesSales({ d }) {
             { key: 'purchase_date', label: 'Tanggal', render: (r) => tanggal(r.purchase_date) },
             { key: 'unit', label: 'Unit' },
             { key: 'frame_number', label: 'Nomor rangka' },
-            { key: 'supplier_name', label: 'Pemasok' },
-            { key: 'purchase_price', label: 'Harga beli', right: true, render: (r) => rupiah(r.purchase_price) },
+            { key: 'supplier_name', label: 'Penjual' },
+            { key: 'agreed_price', label: 'Kesepakatan', right: true, render: (r) => rupiah(r.agreed_price || r.purchase_price) },
+            { key: 'purchase_price', label: 'Dibayar', right: true, render: (r) => rupiah(r.purchase_price) },
           ]}
           rows={d.purchases}
-          footer={<tfoot><tr className="font-semibold"><td className="px-3 py-2" colSpan={5}>Total pembelian</td><td className="px-3 py-2 text-right">{rupiah(d.totals.purchase_amount)}</td></tr></tfoot>}
+          footer={<tfoot><tr className="font-semibold"><td className="px-3 py-2" colSpan={6}>Total pembelian (dibayar)</td><td className="px-3 py-2 text-right">{rupiah(d.totals.purchase_amount)}</td></tr></tfoot>}
         />
       </div>
       <div>
@@ -96,10 +79,10 @@ function PurchasesSales({ d }) {
             { key: 'sale_date', label: 'Tanggal', render: (r) => tanggal(r.sale_date) },
             { key: 'unit', label: 'Unit' },
             { key: 'customer_name', label: 'Pelanggan' },
-            { key: 'jenis', label: 'Jenis', render: (r) => [r.sale_type === 'kredit' ? `Kredit ${r.leasing_company || ''}`.trim() : 'Tunai', r.is_consignment && 'titipan'].filter(Boolean).join(' · ') },
+            { key: 'jenis', label: 'Jenis', render: (r) => [r.sale_type === 'kredit' ? `Kredit ${r.leasing_company || ''}`.trim() : 'Tunai'].join('') },
             { key: 'sale_price', label: 'Harga jual', right: true, render: (r) => rupiah(r.sale_price) },
-            { key: 'hpp_amount', label: 'HPP / titipan', right: true, render: (r) => rupiah(r.is_consignment ? r.consignor_payable : r.hpp_amount) },
-            { key: 'gross_profit', label: 'Laba / komisi', right: true, render: (r) => rupiah(r.gross_profit) },
+            { key: 'hpp_amount', label: 'HPP', right: true, render: (r) => rupiah(r.hpp_amount) },
+            { key: 'gross_profit', label: 'Laba', right: true, render: (r) => rupiah(r.gross_profit) },
             { key: 'margin', label: 'Margin', right: true, render: (r) => persen(r.margin) },
           ]}
           rows={d.sales}
@@ -118,9 +101,7 @@ function Income({ d }) {
       <Line label="Laba kotor" value={d.gross_profit} bold />
       <h4 className="mt-3 text-sm font-semibold text-slate-700">Pendapatan lain</h4>
       <Line label="Komisi leasing" value={d.other_income?.leasing_commission} indent />
-      <Line label="Komisi titip jual" value={d.other_income?.consignment_commission} indent />
-      <Line label="Jasa pengurusan surat" value={d.other_income?.document_service} indent />
-      <Line label="Pendapatan lain-lain (uang muka hangus)" value={d.other_income?.other} indent />
+      <Line label="Pendapatan lain-lain (jasa, bonus, uang muka hangus)" value={d.other_income?.other} indent />
       <Line label="Total pendapatan lain" value={d.other_income?.total} bold />
       <Line label="Beban operasional" value={d.operating_expense} indent negative />
       <div className="mt-2 flex justify-between rounded-lg bg-teal-50 px-3 py-3 font-semibold text-teal-900">
@@ -145,7 +126,6 @@ function Balance({ d }) {
         <div>
           <h3 className="mb-2 font-semibold">Kewajiban</h3>
           <Line label="Uang muka pelanggan" value={d.liabilities?.customer_deposits} indent />
-          <Line label="Utang konsinyasi (titip jual)" value={d.liabilities?.consignment_payable} indent />
           <Line label="Total kewajiban" value={d.liabilities?.total} bold />
           <h3 className="mb-2 mt-5 font-semibold">Ekuitas</h3>
           <Line label="Modal pemilik" value={d.equity.capital} indent />
@@ -169,9 +149,8 @@ function CashFlow({ d }) {
       <Signed label="Penerimaan dari penjualan motor (tunai dan DP)" value={d.operating.sales_receipts} />
       <Signed label="Pencairan dana dari leasing" value={d.operating.leasing_disbursements} />
       <Signed label="Penerimaan komisi leasing" value={d.operating.leasing_commissions} />
-      <Signed label="Penerimaan upah jasa pengurusan surat" value={d.operating.document_services} />
+      <Signed label="Penerimaan pendapatan lain (jasa, bonus)" value={d.operating.document_services} />
       <Signed label="Uang muka pelanggan (bersih)" value={d.operating.customer_deposits} />
-      <Signed label="Pembayaran ke pemilik motor titipan" value={d.operating.consignment_payouts} />
       <Signed label="Pembayaran pembelian motor" value={d.operating.motorcycle_purchases} />
       <Signed label="Pembayaran biaya kendaraan" value={d.operating.vehicle_costs} />
       <Signed label="Pembelian perlengkapan" value={d.operating.supply_purchases} />

@@ -25,9 +25,12 @@ class LeasingController extends Controller
 
     public function disburse(Request $request, Sale $sale, LeasingService $leasing): JsonResponse
     {
-        $data = $request->validate(['disbursed_at' => ['required', 'date', 'after_or_equal:'.$sale->sale_date->toDateString()]]);
+        $data = $request->validate([
+            'disbursed_at' => ['required', 'date', 'after_or_equal:'.$sale->sale_date->toDateString()],
+            'commission' => ['nullable', 'numeric', 'gt:0'],
+        ]);
 
-        return response()->json($leasing->disburse($sale, $data['disbursed_at'], $request->user()->id));
+        return response()->json($leasing->disburse($sale, $data['disbursed_at'], $request->user()->id, $data['commission'] ?? null));
     }
 
     public function commission(Request $request, Sale $sale, LeasingService $leasing): JsonResponse
@@ -38,5 +41,13 @@ class LeasingController extends Controller
         ]);
 
         return response()->json($leasing->recordCommission($sale, $data['received_at'], $data['amount'], $request->user()->id));
+    }
+
+    /** Daftar nama leasing yang pernah dipakai, untuk pilihan di form penjualan. */
+    public function companies(): JsonResponse
+    {
+        return response()->json(
+            Sale::whereNotNull('leasing_company')->distinct()->orderBy('leasing_company')->pluck('leasing_company')
+        );
     }
 }

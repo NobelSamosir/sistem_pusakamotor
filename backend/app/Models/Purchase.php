@@ -9,12 +9,12 @@ class Purchase extends Model
 {
     protected $fillable = [
         'purchase_number', 'motorcycle_id', 'supplier_id', 'user_id',
-        'purchase_date', 'purchase_price', 'payment_method', 'notes',
+        'purchase_date', 'purchase_price', 'agreed_price', 'deduction_notes', 'payment_method', 'notes',
     ];
 
     protected function casts(): array
     {
-        return ['purchase_date' => 'date', 'purchase_price' => 'decimal:2'];
+        return ['purchase_date' => 'date', 'purchase_price' => 'decimal:2', 'agreed_price' => 'decimal:2'];
     }
 
     public function motorcycle(): BelongsTo

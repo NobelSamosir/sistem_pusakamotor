@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\DB;
  * Biaya per unit.
  * Debit:  Persediaan Kendaraan (masuk HPP) atau Beban Operasional
  * Kredit: Kas (dibayar tunai/transfer, misal bengkel) atau Perlengkapan (bahan dari stok sendiri)
- * Motor titipan: biaya selalu menjadi Beban Operasional (motor bukan persediaan showroom).
  */
 class VehicleCostService
 {
@@ -25,10 +24,6 @@ class VehicleCostService
         $motorcycle = Motorcycle::findOrFail($data['motorcycle_id']);
         $hppIncluded = (bool) ($data['hpp_included'] ?? true);
         $source = ($data['source'] ?? 'kas') === 'perlengkapan' ? 'perlengkapan' : 'kas';
-
-        if ($motorcycle->isConsignment()) {
-            $hppIncluded = false;
-        }
         if (! $motorcycle->isInShowroom()) {
             throw new BusinessRuleException("Biaya tidak bisa dicatat untuk motor berstatus {$motorcycle->status}.");
         }

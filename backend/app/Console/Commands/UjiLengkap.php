@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Exceptions\BusinessRuleException;
-use App\Models\Consignment;
 use App\Models\Customer;
 use App\Models\CustomerDeposit;
 use App\Models\JournalEntry;
@@ -12,7 +11,7 @@ use App\Models\Motorcycle;
 use App\Models\Sale;
 use App\Models\Supplier;
 use App\Services\CapitalService;
-use App\Services\ConsignmentService;
+use App\Services\DocumentServiceService;
 use App\Services\DepositService;
 use App\Services\HppService;
 use App\Services\LeasingService;
@@ -27,7 +26,8 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Uji lengkap transaksi perluasan: kredit leasing, uang muka, titip jual, perlengkapan, prive.
+ * Uji lengkap transaksi perluasan: kredit leasing (komisi, bonus), uang muka (dengan atau tanpa unit),
+ * pembelian dengan potongan, perlengkapan, jasa lain, prive.
  * Memakai tanggal Januari 2099 dan selisih neraca terhadap kondisi awal, jadi aman dijalankan
  * di database yang sudah berisi data. Semua data uji di-rollback.
  */
@@ -35,7 +35,7 @@ class UjiLengkap extends Command
 {
     protected $signature = 'sia:uji-lengkap';
 
-    protected $description = 'Uji transaksi kredit, uang muka, titip jual, perlengkapan, dan prive (otomatis di-rollback)';
+    protected $description = 'Uji transaksi kredit, uang muka, pembelian, perlengkapan, jasa lain, dan prive (otomatis di-rollback)';
 
     public function handle(): int
     {
@@ -71,20 +71,26 @@ class UjiLengkap extends Command
             $dl = fn ($bs, $grp, $key) => Money::str(Money::of($bs[$grp][$key])->minus(Money::of($bs0[$grp][$key])));
 
             $budi = Supplier::create(['supplier_name' => 'UJI Budi']);
-            $joko = Supplier::create(['supplier_name' => 'UJI Pak Joko (penitip)']);
+            $maju = Supplier::create(['supplier_name' => 'UJI Showroom Maju']);
             $andi = Customer::create(['customer_name' => 'UJI Andi']); $sari = Customer::create(['customer_name' => 'UJI Sari']); $rina = Customer::create(['customer_name' => 'UJI Rina']);
 
             $S(CapitalService::class)->deposit('2099-01-01', 100000000);
-            $vario = $S(PurchaseService::class)->create($m('UJIXVARIO1', 'Honda', 'Vario', 2022), ['supplier_id' => $budi->id, 'purchase_date' => '2099-01-02', 'purchase_price' => 15000000])->motorcycle;
+            // Pembelian dengan potongan: sepakat 15,5 jt, penjual terima 15 jt (dipotong pajak 500 rb)
+            $tolak('Harga kesepakatan lebih kecil dari yang dibayar', fn() => $S(PurchaseService::class)->create($m('UJIXSALAH1', 'Honda', 'Vario', 2022), ['supplier_id' => $budi->id, 'purchase_date' => '2099-01-02', 'purchase_price' => 15000000, 'agreed_price' => 14000000]));
+            $pv = $S(PurchaseService::class)->create($m('UJIXVARIO1', 'Honda', 'Vario', 2022), ['supplier_id' => $budi->id, 'purchase_date' => '2099-01-02', 'purchase_price' => 15000000, 'agreed_price' => 15500000, 'deduction_notes' => 'Pajak tahunan 500.000']);
+            $vario = $pv->motorcycle;
+            $cek('Pembelian: harga kesepakatan tersimpan', $pv->agreed_price, '15500000.00');
+            $cek('Pembelian: jurnal sebesar yang dibayar', $dl($S(ReportService::class)->balanceSheet('2099-01-02'), 'assets', 'inventory'), '15000000.00');
             $S(VehicleCostService::class)->create(['motorcycle_id' => $vario->id, 'cost_date' => '2099-01-03', 'cost_category' => 'servis', 'amount' => 600000, 'hpp_included' => true]);
             $S(SupplyService::class)->purchase(['purchase_date' => '2099-01-03', 'description' => 'Cat dan dempul', 'vendor' => 'Toko Jaya', 'amount' => 1000000]);
             $S(VehicleCostService::class)->create(['motorcycle_id' => $vario->id, 'cost_date' => '2099-01-04', 'cost_category' => 'cat_body', 'amount' => 300000, 'hpp_included' => true, 'source' => 'perlengkapan']);
-            $cek('HPP Vario (beli+servis+cat sendiri)', (string)$S(HppService::class)->forMotorcycle($vario->fresh()), '15900000.00');
+            $S(VehicleCostService::class)->create(['motorcycle_id' => $vario->id, 'cost_date' => '2099-01-04', 'cost_category' => 'pajak', 'amount' => 500000, 'hpp_included' => true]);
+            $cek('HPP Vario (beli+servis+cat+pajak)', (string)$S(HppService::class)->forMotorcycle($vario->fresh()), '16400000.00');
             $cek('Saldo perlengkapan setelah dipakai', (string)$S(SupplyService::class)->balance(), '700000.00');
             $tolak('Pakai perlengkapan melebihi saldo', fn() => $S(VehicleCostService::class)->create(['motorcycle_id' => $vario->id, 'cost_date' => '2099-01-04', 'cost_category' => 'cat_body', 'amount' => 900000, 'hpp_included' => true, 'source' => 'perlengkapan']));
             $beat = $S(PurchaseService::class)->create($m('UJIXBEAT1', 'Honda', 'Beat', 2020), ['supplier_id' => $budi->id, 'purchase_date' => '2099-01-05', 'purchase_price' => 10000000])->motorcycle;
 
-            // Uang muka Andi -> Vario dipesan
+            // Uang muka Andi untuk Vario
             $umAndi = $S(DepositService::class)->create(['motorcycle_id' => $vario->id, 'customer_id' => $andi->id, 'deposit_date' => '2099-01-06', 'amount' => 1000000]);
             $cek('Status Vario setelah uang muka', $vario->fresh()->status, 'dipesan');
             $tolak('Uang muka kedua untuk motor yang sama', fn() => $S(DepositService::class)->create(['motorcycle_id' => $vario->id, 'customer_id' => $sari->id, 'deposit_date' => '2099-01-06', 'amount' => 500000]));
@@ -92,44 +98,48 @@ class UjiLengkap extends Command
             $tolak('Kredit tanpa nama leasing', fn() => $S(SaleService::class)->create(['motorcycle_id' => $vario->id, 'customer_id' => $andi->id, 'sale_date' => '2099-01-07', 'sale_price' => 18500000, 'sale_type' => 'kredit', 'down_payment' => 3500000]));
             $tolak('DP kredit lebih kecil dari tanda jadi', fn() => $S(SaleService::class)->create(['motorcycle_id' => $vario->id, 'customer_id' => $andi->id, 'sale_date' => '2099-01-07', 'sale_price' => 18500000, 'sale_type' => 'kredit', 'leasing_company' => 'Adira Finance', 'down_payment' => 500000]));
 
-            // Jual Vario kredit ke Andi
+            // Jual Vario kredit ke Andi lewat Adira
             $sv = $S(SaleService::class)->create(['motorcycle_id' => $vario->id, 'customer_id' => $andi->id, 'sale_date' => '2099-01-08', 'sale_price' => 18500000,
               'sale_type' => 'kredit', 'leasing_company' => 'Adira Finance', 'down_payment' => 3500000]);
             $cek('Kredit: dibiayai leasing', $sv->financed_amount, '15000000.00');
             $cek('Kredit: tanda jadi terpakai', $sv->deposit_applied, '1000000.00');
             $cek('Kredit: status pencairan', $sv->disbursement_status, 'menunggu');
-            $cek('Kredit: laba kotor', $sv->gross_profit, '2600000.00');
+            $cek('Kredit: laba kotor', $sv->gross_profit, '2100000.00');
             $cek('Uang muka Andi jadi dipakai', $umAndi->fresh()->status, 'dipakai');
             $bsMid = $S(ReportService::class)->balanceSheet('2099-01-08');
             $cek('Neraca tgl 8: piutang leasing', $dl($bsMid, 'assets', 'leasing_receivable'), '15000000.00');
             $cek('Neraca tgl 8 seimbang', var_export($bsMid['is_balanced'], true), 'true');
-            $S(LeasingService::class)->disburse($sv, '2099-01-11');
+            // Dana cair bersama komisi (nominal diisi bebas)
+            $S(LeasingService::class)->disburse($sv, '2099-01-11', null, 750000);
+            $cek('Komisi tercatat saat pencairan', $sv->fresh()->leasing_commission, '750000.00');
             $tolak('Pencairan dua kali', fn() => $S(LeasingService::class)->disburse($sv->fresh(), '2099-01-12'));
-            $S(LeasingService::class)->recordCommission($sv->fresh(), '2099-01-11', 500000);
+            $tolak('Komisi dua kali', fn() => $S(LeasingService::class)->recordCommission($sv->fresh(), '2099-01-12', 100000));
+            $tolak('Bonus nol', fn() => $S(DocumentServiceService::class)->create(['service_date' => '2099-01-20', 'service_type' => 'bonus_leasing', 'amount_received' => 0, 'amount_paid' => 0]));
+            $S(DocumentServiceService::class)->create(['service_date' => '2099-01-20', 'service_type' => 'bonus_leasing', 'description' => 'Adira Finance target 2026', 'amount_received' => 1000000, 'amount_paid' => 0]);
 
-            // Titip jual NMAX
-            $tj = $S(ConsignmentService::class)->receive($m('UJIXNMAX1', 'Yamaha', 'NMAX', 2021), ['consignor_id' => $joko->id, 'received_date' => '2099-01-09', 'consignor_price' => 20000000]);
-            $nmax = $tj->motorcycle;
-            $cek('Titipan: jenis kepemilikan', $nmax->ownership_type, 'titipan');
-            $cek('Titipan: dasar biaya untuk DSS', (string)$S(HppService::class)->forMotorcycle($nmax->fresh()), '20000000.00');
-            $cek('Titipan tidak masuk persediaan', $dl($S(ReportService::class)->balanceSheet('2099-01-09'), 'assets', 'inventory'), '10000000.00');
-            $c = $S(VehicleCostService::class)->create(['motorcycle_id' => $nmax->id, 'cost_date' => '2099-01-10', 'cost_category' => 'lainnya', 'description' => 'Cuci', 'amount' => 100000, 'hpp_included' => true]);
-            $cek('Biaya motor titipan dipaksa jadi beban', var_export($c->hpp_included, true), 'false');
-            $tolak('Bayar penitip sebelum motor laku', fn() => $S(ConsignmentService::class)->payout($tj->fresh(), '2099-01-10'));
-            $tolak('Jual titipan di bawah harga penitip', fn() => $S(SaleService::class)->create(['motorcycle_id' => $nmax->id, 'customer_id' => $sari->id, 'sale_date' => '2099-01-12', 'sale_price' => 19000000]));
-            $sn = $S(SaleService::class)->create(['motorcycle_id' => $nmax->id, 'customer_id' => $sari->id, 'sale_date' => '2099-01-12', 'sale_price' => 21500000]);
-            $cek('Titipan laku: komisi', $sn->consignment_commission, '1500000.00');
-            $cek('Titipan laku: tanpa HPP', $sn->hpp_amount, '0.00');
-            $cek('Titipan laku: utang ke penitip', $dl($S(ReportService::class)->balanceSheet('2099-01-12'), 'liabilities', 'consignment_payable'), '20000000.00');
-            $tolak('Kembalikan titipan yang sudah laku', fn() => $S(ConsignmentService::class)->returnToOwner($tj->fresh(), '2099-01-13'));
-            $S(ConsignmentService::class)->payout($tj->fresh(), '2099-01-13');
-            $cek('Status titipan setelah dibayar', $tj->fresh()->status, 'lunas');
+            // Uang muka sebelum unit ada: Sari pesan PCX, unit dibeli dari showroom lain
+            $tolak('Uang muka tanpa unit dan tanpa keterangan', fn() => $S(DepositService::class)->create(['customer_id' => $sari->id, 'deposit_date' => '2099-01-12', 'amount' => 2000000]));
+            $umSari = $S(DepositService::class)->create(['customer_id' => $sari->id, 'unit_description' => 'Honda PCX 2021 hitam', 'deposit_date' => '2099-01-12', 'amount' => 2000000]);
+            $cek('Uang muka tanpa unit: motor kosong', var_export($umSari->motorcycle_id, true), 'NULL');
+            $pcx = $S(PurchaseService::class)->create($m('UJIXPCX1', 'Honda', 'PCX', 2021), ['supplier_id' => $maju->id, 'purchase_date' => '2099-01-13', 'purchase_price' => 25000000])->motorcycle;
+            $tolak('Uang muka Sari dipakai pelanggan lain', fn() => $S(SaleService::class)->create(['motorcycle_id' => $pcx->id, 'customer_id' => $rina->id, 'sale_date' => '2099-01-14', 'sale_price' => 28000000, 'deposit_id' => $umSari->id]));
+            $sp = $S(SaleService::class)->create(['motorcycle_id' => $pcx->id, 'customer_id' => $sari->id, 'sale_date' => '2099-01-14', 'sale_price' => 28000000, 'deposit_id' => $umSari->id]);
+            $cek('PCX: uang muka terpakai', $sp->deposit_applied, '2000000.00');
+            $cek('PCX: laba kotor', $sp->gross_profit, '3000000.00');
+            $cek('Uang muka Sari terkait ke PCX', $umSari->fresh()->motorcycle_id, $pcx->id);
 
-            // Uang muka Rina untuk Beat, lalu hangus
+            // Uang muka Rina untuk Beat lalu hangus; uang muka Andi tanpa unit lalu dikembalikan
             $umRina = $S(DepositService::class)->create(['motorcycle_id' => $beat->id, 'customer_id' => $rina->id, 'deposit_date' => '2099-01-14', 'amount' => 500000]);
             $S(DepositService::class)->forfeit($umRina, '2099-01-20');
             $cek('Beat kembali tersedia setelah uang muka hangus', $beat->fresh()->status, 'tersedia');
             $tolak('Hanguskan uang muka dua kali', fn() => $S(DepositService::class)->forfeit($umRina->fresh(), '2099-01-20'));
+            $umAndi2 = $S(DepositService::class)->create(['customer_id' => $andi->id, 'unit_description' => 'Yamaha NMAX', 'deposit_date' => '2099-01-15', 'amount' => 300000]);
+            $S(DepositService::class)->refund($umAndi2, '2099-01-16');
+            $cek('Uang muka tanpa unit dikembalikan', $umAndi2->fresh()->status, 'dikembalikan');
+
+            // Pengantaran pinjaman ke bank: hanya komisi
+            $jp = $S(DocumentServiceService::class)->create(['service_date' => '2099-01-18', 'service_type' => 'pengantaran_pinjaman', 'description' => 'Dana tunai BPKB Adira', 'amount_received' => 400000, 'amount_paid' => 0]);
+            $cek('Pengantaran pinjaman: komisi', $jp->fee, '400000.00');
 
             // Prive, beban, perlengkapan umum
             $tolak('Prive melebihi kas', fn() => $S(CapitalService::class)->withdraw('2099-01-21', 999999999999));
@@ -137,49 +147,43 @@ class UjiLengkap extends Command
             $S(OperatingExpenseService::class)->create(['expense_date' => '2099-01-22', 'category' => 'listrik', 'amount' => 300000]);
             $S(OperatingExpenseService::class)->create(['expense_date' => '2099-01-22', 'category' => 'lainnya', 'description' => 'Kain lap dan sabun', 'amount' => 100000, 'source' => 'perlengkapan']);
 
-            // Titipan kedua dikembalikan
-            $tj2 = $S(ConsignmentService::class)->receive($m('UJIXSCOOPY1', 'Honda', 'Scoopy', 2019), ['consignor_id' => $joko->id, 'received_date' => '2099-01-15', 'consignor_price' => 12000000]);
-            $S(ConsignmentService::class)->returnToOwner($tj2, '2099-01-25');
-            $cek('Titipan tidak laku dikembalikan', $tj2->motorcycle->fresh()->status, 'dikembalikan');
-            $tolak('Jual motor yang sudah dikembalikan', fn() => $S(SaleService::class)->create(['motorcycle_id' => $tj2->motorcycle_id, 'customer_id' => $sari->id, 'sale_date' => '2099-01-26', 'sale_price' => 13000000]));
-
             // ===== Laporan akhir bulan
             $R = $S(ReportService::class);
             $is = $R->incomeStatement('2099-01-01', '2099-01-30');
-            $cek('LR pendapatan penjualan', $is['revenue'], '18500000.00');
-            $cek('LR HPP', $is['cogs'], '15900000.00');
-            $cek('LR komisi leasing', $is['other_income']['leasing_commission'], '500000.00');
-            $cek('LR komisi titip jual', $is['other_income']['consignment_commission'], '1500000.00');
-            $cek('LR pendapatan lain (uang muka hangus)', $is['other_income']['other'], '500000.00');
-            $cek('LR beban operasional', $is['operating_expense'], '500000.00');
-            $cek('LR laba bersih', $is['net_profit'], '4600000.00');
+            $cek('LR pendapatan penjualan', $is['revenue'], '46500000.00');
+            $cek('LR HPP', $is['cogs'], '41400000.00');
+            $cek('LR komisi leasing', $is['other_income']['leasing_commission'], '750000.00');
+            $cek('LR pendapatan lain (hangus + pinjaman + bonus)', $is['other_income']['other'], '1900000.00');
+            $cek('LR beban operasional', $is['operating_expense'], '400000.00');
+            $cek('LR laba bersih', $is['net_profit'], '7350000.00');
             $bs = $R->balanceSheet('2099-01-30');
-            $cek('Neraca kas', $dl($bs, 'assets', 'cash'), '92000000.00');
+            $cek('Neraca kas', $dl($bs, 'assets', 'cash'), '94750000.00');
             $cek('Neraca piutang leasing', $dl($bs, 'assets', 'leasing_receivable'), '0.00');
             $cek('Neraca persediaan (Beat)', $dl($bs, 'assets', 'inventory'), '10000000.00');
             $cek('Neraca perlengkapan', $dl($bs, 'assets', 'supplies'), '600000.00');
-            $cek('Neraca total aset', $dl($bs, 'assets', 'total'), '102600000.00');
+            $cek('Neraca total aset', $dl($bs, 'assets', 'total'), '105350000.00');
             $cek('Neraca kewajiban', $dl($bs, 'liabilities', 'total'), '0.00');
             $cek('Neraca prive', $dl($bs, 'equity', 'prive'), '2000000.00');
-            $cek('Neraca total ekuitas', $dl($bs, 'equity', 'total'), '102600000.00');
+            $cek('Neraca total ekuitas', $dl($bs, 'equity', 'total'), '105350000.00');
             $cek('Neraca seimbang', var_export($bs['is_balanced'], true), 'true');
             $cf = $R->cashFlow('2099-01-01', '2099-01-30');
-            $cek('AK penerimaan penjualan', $cf['operating']['sales_receipts'], '24000000.00');
+            $cek('AK penerimaan penjualan', $cf['operating']['sales_receipts'], '28500000.00');
             $cek('AK pencairan leasing', $cf['operating']['leasing_disbursements'], '15000000.00');
-            $cek('AK uang muka', $cf['operating']['customer_deposits'], '1500000.00');
-            $cek('AK bayar penitip', $cf['operating']['consignment_payouts'], '-20000000.00');
+            $cek('AK komisi leasing', $cf['operating']['leasing_commissions'], '750000.00');
+            $cek('AK uang muka', $cf['operating']['customer_deposits'], '3500000.00');
+            $cek('AK pendapatan lain (jasa, bonus)', $cf['operating']['document_services'], '1400000.00');
             $cek('AK perlengkapan', $cf['operating']['supply_purchases'], '-1000000.00');
-            $cek('AK operasi bersih', $cf['operating']['net'], '-6000000.00');
+            $cek('AK operasi bersih', $cf['operating']['net'], '-3250000.00');
             $cek('AK prive', $cf['financing']['owner_withdrawals'], '-2000000.00');
             $cek('AK kas akhir = neraca', $cf['closing_cash'], $bs['assets']['cash']);
             $st = $R->stock();
             $cek('Stok milik showroom (tambahan)', $st['total_units'] - $st0['total_units'], 1);
-            $cek('Stok titipan aktif (tambahan)', count($st['consignments']) - count($st0['consignments']), 0);
             $ps = $R->purchasesSales('2099-01-01', '2099-01-30');
             $cek('Laporan jual: 2 penjualan', $ps['totals']['sale_count'], 2);
+            $cek('Laporan beli: harga kesepakatan', collect($ps['purchases'])->firstWhere('frame_number', 'UJIXVARIO1')->agreed_price, '15500000.00');
             $cek('Total debit = total kredit (seluruh jurnal)', Money::str(Money::of(JournalLine::sum('debit'))), Money::str(Money::of(JournalLine::sum('credit'))));
             foreach (JournalEntry::with('lines')->where('id', '>', $startId)->get() as $e) {
-              $cek("Jurnal {$e->journal_number} seimbang", (string) Money::of($e->lines->sum('debit'))->minus(Money::of($e->lines->sum('credit')))->isZero() ? 'ya' : 'tidak', 'ya');
+              $cek("Jurnal {$e->journal_number} seimbang", Money::of($e->lines->sum('debit'))->minus(Money::of($e->lines->sum('credit')))->isZero() ? 'ya' : 'tidak', 'ya');
             }
         } finally {
             DB::rollBack();

@@ -10,37 +10,39 @@ export default function Leasing() {
   const [page, setPage] = useState(1)
   const [error, setError] = useState('')
   const [ok, setOk] = useFlash()
+  const [cair, setCair] = useState(null) // { sale, disbursed_at, commission }
   const [komisi, setKomisi] = useState(null) // { sale, received_at, amount }
   const list = useFetch('/leasing', { page, status })
   const dash = useFetch('/dashboard')
-  const rows = list.data?.data || []
+  const o = dash.data?.outstanding
 
-  const cair = async (s) => {
-    if (!window.confirm(`Dana ${rupiah(s.financed_amount)} dari ${s.leasing_company} sudah masuk ke kas/rekening showroom?`)) return
+  const run = async (fn, pesan) => {
     setError('')
-    try {
-      await api.post(`/leasing/${s.id}/disburse`, { disbursed_at: today() })
-      setOk('Pencairan tercatat: Kas (debit) / Piutang Perusahaan Pembiayaan (kredit).')
-      list.reload(); dash.reload()
-    } catch (err) { setError(errorMessage(err)) }
+    try { await fn(); setOk(pesan); list.reload(); dash.reload(); return true } catch (err) { setError(errorMessage(err)); return false }
+  }
+
+  const simpanCair = async (e) => {
+    e.preventDefault()
+    const done = await run(
+      () => api.post(`/leasing/${cair.sale.id}/disburse`, { disbursed_at: cair.disbursed_at, commission: cair.commission || null }),
+      cair.commission ? 'Pencairan dan komisi tercatat.' : 'Pencairan tercatat: Kas (debit) / Piutang Perusahaan Pembiayaan (kredit).',
+    )
+    if (done) setCair(null)
   }
 
   const simpanKomisi = async (e) => {
-    e.preventDefault(); setError('')
-    try {
-      await api.post(`/leasing/${komisi.sale.id}/commission`, { received_at: komisi.received_at, amount: komisi.amount })
-      setOk('Komisi leasing tercatat sebagai pendapatan.')
-      setKomisi(null); list.reload()
-    } catch (err) { setError(errorMessage(err)) }
+    e.preventDefault()
+    const done = await run(
+      () => api.post(`/leasing/${komisi.sale.id}/commission`, { received_at: komisi.received_at, amount: komisi.amount }),
+      'Komisi leasing tercatat sebagai pendapatan.',
+    )
+    if (done) setKomisi(null)
   }
 
-  const o = dash.data?.outstanding
 
   return (
     <div>
-      <PageHeader
-        title="Penjualan Kredit (Leasing)"
-      />
+      <PageHeader title="Penjualan Kredit (Leasing)" />
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <StatCard label="Piutang leasing belum cair" value={rupiah(o?.leasing_receivable)} note={`${o?.leasing_waiting ?? 0} transaksi menunggu`} tone="sky" />
         <StatCard label="Total transaksi kredit" value={list.data?.total ?? '-'} note="seluruh periode" />
@@ -48,6 +50,24 @@ export default function Leasing() {
       </div>
       <Alert>{error}</Alert>
       <Alert type="success">{ok}</Alert>
+
+      {cair && (
+        <Card title={`Pencairan dari ${cair.sale.leasing_company} (${cair.sale.sale_number})`} className="mb-6">
+          <form onSubmit={simpanCair} className="grid gap-4 md:grid-cols-4">
+            <Input label="Tanggal cair" type="date" value={cair.disbursed_at} onChange={(e) => setCair({ ...cair, disbursed_at: e.target.value })} required />
+            <div className="text-sm">
+              <p className="mb-1.5 font-medium text-slate-700">Dana pokok</p>
+              <p className="py-2 text-lg font-semibold">{rupiah(cair.sale.financed_amount)}</p>
+            </div>
+            <MoneyInput label="Komisi ikut cair (opsional)" hint="Kosongkan jika komisi dibayar terpisah" value={cair.commission} onChange={(v) => setCair({ ...cair, commission: v })} />
+            <div className="flex items-end gap-2">
+              <Button>Simpan</Button>
+              <Button type="button" variant="secondary" onClick={() => setCair(null)}>Batal</Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
       {komisi && (
         <Card title={`Komisi dari ${komisi.sale.leasing_company} (${komisi.sale.sale_number})`} className="mb-6">
           <form onSubmit={simpanKomisi} className="grid gap-4 md:grid-cols-4">
@@ -60,6 +80,7 @@ export default function Leasing() {
           </form>
         </Card>
       )}
+
       <Card
         title="Daftar penjualan kredit"
         actions={<Select placeholder="Semua" options={[{ value: 'menunggu', label: 'Menunggu cair' }, { value: 'cair', label: 'Sudah cair' }]} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }} className="w-44 -mt-1" />}
@@ -78,17 +99,22 @@ export default function Leasing() {
             {
               key: 'aksi', label: '', render: (r) => (
                 <span className="flex gap-1">
-                  {r.disbursement_status === 'menunggu' && <Button variant="ghost" className="px-2 py-1" onClick={() => cair(r)}>Tandai cair</Button>}
-                  {!r.commission_received_at && <Button variant="ghost" className="px-2 py-1" onClick={() => setKomisi({ sale: r, received_at: today(), amount: '' })}>+ Komisi</Button>}
+                  {r.disbursement_status === 'menunggu' && (
+                    <Button variant="ghost" className="px-2 py-1" onClick={() => { setKomisi(null); setCair({ sale: r, disbursed_at: today(), commission: '' }) }}>Catat cair</Button>
+                  )}
+                  {!r.commission_received_at && (
+                    <Button variant="ghost" className="px-2 py-1" onClick={() => { setCair(null); setKomisi({ sale: r, received_at: today(), amount: '' }) }}>+ Komisi</Button>
+                  )}
                 </span>
               ),
             },
           ]}
-          rows={rows}
+          rows={list.data?.data}
           empty="Belum ada penjualan kredit."
         />
         <Pagination meta={list.data} onPage={setPage} />
       </Card>
+
     </div>
   )
 }

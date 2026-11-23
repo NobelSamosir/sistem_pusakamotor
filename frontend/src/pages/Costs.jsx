@@ -22,12 +22,11 @@ export default function Costs() {
   const list = useFetch('/vehicle-costs', { page })
   const hpp = useFetch(form.motorcycle_id ? `/motorcycles/${form.motorcycle_id}` : null)
   const supplies = useFetch('/supplies')
-  const titipan = hpp.data?.ownership_type === 'titipan'
 
   const submit = async (e) => {
     e.preventDefault(); setError('')
     try {
-      await api.post('/vehicle-costs', { ...form, motorcycle_id: Number(form.motorcycle_id), hpp_included: titipan ? false : form.hpp_included })
+      await api.post('/vehicle-costs', { ...form, motorcycle_id: Number(form.motorcycle_id), hpp_included: form.hpp_included })
       setOk('Biaya tersimpan dan jurnal otomatis dibuat.')
       setForm({ ...form, description: '', amount: '' })
       list.reload(); hpp.reload(); supplies.reload()
@@ -43,7 +42,7 @@ export default function Costs() {
         <form onSubmit={submit} className="grid gap-4 md:grid-cols-3">
           <div className="md:col-span-2"><MotorPicker value={form.motorcycle_id} onChange={(v) => setForm({ ...form, motorcycle_id: v })} /></div>
           <div className="rounded-lg bg-teal-50 px-4 py-3">
-            <p className="text-xs text-teal-800">{titipan ? 'Harga titipan pemilik' : 'HPP berjalan unit ini'}</p>
+            <p className="text-xs text-teal-800">HPP berjalan unit ini</p>
             <p className="text-lg font-semibold text-teal-900">{hpp.data ? rupiah(hpp.data.hpp_current) : '-'}</p>
           </div>
           <Input label="Tanggal" type="date" value={form.cost_date} onChange={(e) => setForm({ ...form, cost_date: e.target.value })} required />
@@ -59,9 +58,7 @@ export default function Costs() {
           />
           <Input label="Keterangan" className="md:col-span-1" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Ganti oli dan kampas rem" />
           <div className="flex items-end pb-2">
-            {titipan
-              ? <p className="text-xs text-violet-700">Unit titipan: biaya dicatat sebagai beban showroom, bukan HPP.</p>
-              : <Checkbox label="Masuk HPP unit" checked={form.hpp_included} onChange={(e) => setForm({ ...form, hpp_included: e.target.checked })} />}
+            <Checkbox label="Masuk HPP unit" checked={form.hpp_included} onChange={(e) => setForm({ ...form, hpp_included: e.target.checked })} />
           </div>
           <div className="md:col-span-3 flex justify-end"><Button>Simpan biaya</Button></div>
         </form>

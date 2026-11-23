@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Exceptions\BusinessRuleException;
 use App\Models\Account;
-use App\Models\Consignment;
 use App\Models\CustomerDeposit;
 use App\Models\JournalEntry;
 use App\Models\Motorcycle;
@@ -12,16 +11,14 @@ use App\Models\Sale;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Penjualan unit (tunai atau kredit lewat leasing; motor milik atau titipan).
+ * Penjualan unit, tunai atau kredit lewat leasing.
  *
  * Jurnal pendapatan (satu jurnal, debit bisa lebih dari satu baris):
  *   Dr Kas                        uang yang diterima hari ini
  *   Dr Uang Muka Pelanggan        tanda jadi yang sudah dibayar sebelumnya (jika ada)
  *   Dr Piutang Pembiayaan         sisa harga yang akan dicairkan leasing (kredit)
- *      Cr Pendapatan Penjualan    harga jual                         (motor milik)
- *      Cr Utang Konsinyasi        harga bersih untuk penitip         (motor titipan)
- *      Cr Pendapatan Komisi Titip selisih harga jual - harga penitip (motor titipan)
- * Jurnal HPP (motor milik saja): Dr HPP / Cr Persediaan Kendaraan
+ *      Cr Pendapatan Penjualan Kendaraan   harga jual
+ * Jurnal HPP: Dr HPP / Cr Persediaan Kendaraan
  */
 class SaleService
 {
@@ -29,7 +26,7 @@ class SaleService
 
     /**
      * @param array $data motorcycle_id, customer_id, sale_date, sale_price, sale_type (tunai|kredit),
-     *                    leasing_company?, down_payment?, payment_method?, notes?
+     *                    leasing_company?, down_payment?, deposit_id?, payment_method?, notes?
      */
     public function create(array $data, ?int $userId = null): Sale
     {
@@ -40,14 +37,7 @@ class SaleService
                 throw new BusinessRuleException("Motor ini tidak bisa dijual (status: {$motorcycle->status}).");
             }
 
-            $isTitip = $motorcycle->isConsignment();
-            $consignment = null;
-            if ($isTitip) {
-                $consignment = Consignment::where('motorcycle_id', $motorcycle->id)->lockForUpdate()->first();
-                if (! $consignment || $consignment->status !== Consignment::DITITIPKAN) {
-                    throw new BusinessRuleException('Data titip jual motor ini tidak aktif.');
-                }
-            } elseif (! $motorcycle->purchase()->exists()) {
+            if (! $motorcycle->purchase()->exists()) {
                 throw new BusinessRuleException('Motor belum memiliki data pembelian, HPP tidak bisa dihitung.');
             }
 
@@ -61,6 +51,19 @@ class SaleService
                 ->where('status', CustomerDeposit::AKTIF)->lockForUpdate()->first();
             if ($deposit && (int) $deposit->customer_id !== (int) $data['customer_id']) {
                 throw new BusinessRuleException("Motor ini sudah dipesan pelanggan lain ({$deposit->deposit_number}). Kembalikan atau hanguskan uang mukanya terlebih dahulu.");
+            }
+            // Uang muka yang dibayar sebelum unitnya ada (motor dicari dulu ke showroom lain)
+            if (! $deposit && ! empty($data['deposit_id'])) {
+                $deposit = CustomerDeposit::whereKey($data['deposit_id'])->lockForUpdate()->first();
+                if (! $deposit || $deposit->status !== CustomerDeposit::AKTIF) {
+                    throw new BusinessRuleException('Uang muka yang dipilih sudah tidak aktif.');
+                }
+                if ($deposit->motorcycle_id && (int) $deposit->motorcycle_id !== (int) $motorcycle->id) {
+                    throw new BusinessRuleException("Uang muka {$deposit->deposit_number} terikat ke unit lain.");
+                }
+                if ((int) $deposit->customer_id !== (int) $data['customer_id']) {
+                    throw new BusinessRuleException("Uang muka {$deposit->deposit_number} milik pelanggan lain.");
+                }
             }
             $depositAmt = $deposit ? Money::of($deposit->amount) : Money::of(0);
 
@@ -89,19 +92,8 @@ class SaleService
                 $cashNow = $salePrice->minus($depositAmt);
             }
 
-            // Dasar biaya dan laba
-            if ($isTitip) {
-                $payable = Money::of($consignment->consignor_price);
-                $commission = $salePrice->minus($payable);
-                if ($commission->isNegative()) {
-                    throw new BusinessRuleException('Harga jual di bawah harga bersih yang dijanjikan kepada penitip.');
-                }
-                $hpp = Money::of(0);
-                $grossProfit = $commission;
-            } else {
-                $hpp = $this->hpp->forMotorcycle($motorcycle);
-                $grossProfit = $salePrice->minus($hpp);
-            }
+            $hpp = $this->hpp->forMotorcycle($motorcycle);
+            $grossProfit = $salePrice->minus($hpp);
 
             $date = $data['sale_date'];
             $sale = Sale::create([
@@ -121,14 +113,10 @@ class SaleService
                 'financed_amount' => $type === Sale::KREDIT ? Money::str($financed) : null,
                 'disbursement_status' => $type === Sale::KREDIT ? 'menunggu' : null,
                 'deposit_applied' => Money::str($depositAmt),
-                'is_consignment' => $isTitip,
-                'consignor_payable' => $isTitip ? Money::str($payable) : null,
-                'consignment_commission' => $isTitip ? Money::str($commission) : null,
             ]);
 
             $motorcycle->update(['status' => Motorcycle::STATUS_TERJUAL]);
-            $consignment?->update(['status' => Consignment::TERJUAL]);
-            $deposit?->update(['status' => CustomerDeposit::DIPAKAI, 'sale_id' => $sale->id, 'closed_at' => $date]);
+            $deposit?->update(['status' => CustomerDeposit::DIPAKAI, 'sale_id' => $sale->id, 'closed_at' => $date, 'motorcycle_id' => $motorcycle->id]);
 
             $label = "{$motorcycle->brand} {$motorcycle->model} {$motorcycle->year} ({$motorcycle->frame_number})";
             $lines = [];
@@ -141,27 +129,16 @@ class SaleService
             if ($financed->isPositive()) {
                 $lines[] = ['account' => Account::PIUTANG_LEASING, 'debit' => Money::str($financed), 'memo' => $data['leasing_company']];
             }
-            if ($isTitip) {
-                if ($payable->isPositive()) {
-                    $lines[] = ['account' => Account::UTANG_KONSINYASI, 'credit' => Money::str($payable), 'memo' => $consignment->consignment_number];
-                }
-                if ($commission->isPositive()) {
-                    $lines[] = ['account' => Account::KOMISI_TITIP, 'credit' => Money::str($commission)];
-                }
-            } else {
-                $lines[] = ['account' => Account::PENDAPATAN, 'credit' => $sale->sale_price];
-            }
+            $lines[] = ['account' => Account::PENDAPATAN, 'credit' => $sale->sale_price];
 
             $jenis = $type === Sale::KREDIT ? "kredit ({$data['leasing_company']})" : 'tunai';
-            $this->journal->post($date, ($isTitip ? 'Penjualan titip jual ' : 'Penjualan ')."{$jenis} {$label}",
+            $this->journal->post($date, "Penjualan {$jenis} {$label}",
                 JournalEntry::REF_SALE, $sale->id, $lines, $userId);
 
-            if (! $isTitip) {
-                $this->journal->post($date, "HPP penjualan {$label}", JournalEntry::REF_SALE, $sale->id, [
-                    ['account' => Account::HPP, 'debit' => $sale->hpp_amount],
-                    ['account' => Account::PERSEDIAAN, 'credit' => $sale->hpp_amount],
-                ], $userId);
-            }
+            $this->journal->post($date, "HPP penjualan {$label}", JournalEntry::REF_SALE, $sale->id, [
+                ['account' => Account::HPP, 'debit' => $sale->hpp_amount],
+                ['account' => Account::PERSEDIAAN, 'credit' => $sale->hpp_amount],
+            ], $userId);
 
             return $sale;
         });

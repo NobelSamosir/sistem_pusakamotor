@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Uang muka / tanda jadi pelanggan (booking).
  *  - diterima:     Dr Kas / Cr Uang Muka Pelanggan       (kewajiban, motor belum diserahkan)
+ *                  unit boleh belum ada: cukup keterangan unit yang dipesan, dikaitkan saat penjualan
  *  - dipakai:      otomatis saat penjualan (SaleService)
  *  - dikembalikan: Dr Uang Muka Pelanggan / Cr Kas
  *  - hangus:       Dr Uang Muka Pelanggan / Cr Pendapatan Lain-lain (pembeli batal)
@@ -28,15 +29,21 @@ class DepositService
         }
 
         return DB::transaction(function () use ($data, $amount, $userId) {
-            $m = Motorcycle::whereKey($data['motorcycle_id'])->lockForUpdate()->firstOrFail();
-            if (! in_array($m->status, [Motorcycle::STATUS_TERSEDIA, Motorcycle::STATUS_PERBAIKAN], true)) {
-                throw new BusinessRuleException("Motor tidak bisa dipesan (status: {$m->status}).");
+            $m = null;
+            if (! empty($data['motorcycle_id'])) {
+                $m = Motorcycle::whereKey($data['motorcycle_id'])->lockForUpdate()->firstOrFail();
+                if (! in_array($m->status, [Motorcycle::STATUS_TERSEDIA, Motorcycle::STATUS_PERBAIKAN], true)) {
+                    throw new BusinessRuleException("Motor tidak bisa dipesan (status: {$m->status}).");
+                }
+            } elseif (empty($data['unit_description'])) {
+                throw new BusinessRuleException('Pilih unit motor, atau tulis keterangan unit yang dipesan jika motornya belum ada.');
             }
 
             $date = $data['deposit_date'];
             $deposit = CustomerDeposit::create([
                 'deposit_number' => DocumentNumber::next(CustomerDeposit::class, 'deposit_number', 'UM', $date),
-                'motorcycle_id' => $m->id,
+                'motorcycle_id' => $m?->id,
+                'unit_description' => $m ? null : $data['unit_description'],
                 'customer_id' => $data['customer_id'],
                 'user_id' => $userId,
                 'deposit_date' => $date,
@@ -44,9 +51,10 @@ class DepositService
                 'status' => CustomerDeposit::AKTIF,
                 'notes' => $data['notes'] ?? null,
             ]);
-            $m->update(['status' => Motorcycle::STATUS_DIPESAN]);
+            $m?->update(['status' => Motorcycle::STATUS_DIPESAN]);
 
-            $this->journal->post($date, "Uang muka {$deposit->deposit_number} untuk {$m->brand} {$m->model} ({$m->frame_number})",
+            $unit = $m ? "{$m->brand} {$m->model} ({$m->frame_number})" : "pesanan {$deposit->unit_description}";
+            $this->journal->post($date, "Uang muka {$deposit->deposit_number} untuk {$unit}",
                 JournalEntry::REF_DEPOSIT, $deposit->id, [
                     ['account' => Account::KAS, 'debit' => $deposit->amount],
                     ['account' => Account::UANG_MUKA, 'credit' => $deposit->amount],
@@ -82,8 +90,10 @@ class DepositService
             ], $userId);
 
             $deposit->update(['status' => $status, 'closed_at' => $date]);
-            Motorcycle::whereKey($deposit->motorcycle_id)->where('status', Motorcycle::STATUS_DIPESAN)
-                ->update(['status' => Motorcycle::STATUS_TERSEDIA]);
+            if ($deposit->motorcycle_id) {
+                Motorcycle::whereKey($deposit->motorcycle_id)->where('status', Motorcycle::STATUS_DIPESAN)
+                    ->update(['status' => Motorcycle::STATUS_TERSEDIA]);
+            }
 
             return $deposit;
         });

@@ -11,15 +11,17 @@ use Illuminate\Support\Facades\DB;
 /**
  * Penjualan kredit lewat perusahaan pembiayaan:
  *  - pencairan dana:  Dr Kas / Cr Piutang Perusahaan Pembiayaan
- *  - komisi leasing:  Dr Kas / Cr Pendapatan Komisi Leasing
+ *  - komisi leasing:  Dr Kas / Cr Pendapatan Komisi Leasing (nominal diisi sesuai yang diterima,
+ *                     bisa sekaligus saat pencairan)
+ *  - bonus tahunan:   dicatat di menu Pendapatan Lain-lain (Dr Kas / Cr Pendapatan Lain-lain)
  */
 class LeasingService
 {
     public function __construct(private JournalService $journal) {}
 
-    public function disburse(Sale $sale, string $date, ?int $userId = null): Sale
+    public function disburse(Sale $sale, string $date, ?int $userId = null, string|int|float|null $commission = null): Sale
     {
-        return DB::transaction(function () use ($sale, $date, $userId) {
+        return DB::transaction(function () use ($sale, $date, $userId, $commission) {
             $sale = Sale::whereKey($sale->id)->lockForUpdate()->firstOrFail();
             if ($sale->sale_type !== Sale::KREDIT) {
                 throw new BusinessRuleException('Penjualan ini bukan penjualan kredit.');
@@ -35,6 +37,11 @@ class LeasingService
                 ], $userId);
 
             $sale->update(['disbursement_status' => 'cair', 'disbursed_at' => $date]);
+
+            // Komisi yang cair bersamaan dengan dana pokok dicatat sebagai jurnal terpisah
+            if ($commission !== null && $commission !== '' && Money::of($commission)->isPositive()) {
+                $sale = $this->recordCommission($sale, $date, $commission, $userId);
+            }
 
             return $sale;
         });
@@ -67,4 +74,5 @@ class LeasingService
             return $sale;
         });
     }
+
 }

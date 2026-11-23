@@ -7,10 +7,9 @@ import { Alert, Badge, Button, Card, Loading, PageHeader, Pagination, Select, Ta
 export default function Motors() {
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
-  const [owner, setOwner] = useState('')
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const { data, loading, error } = useFetch('/motorcycles', { q: search, status, ownership_type: owner, page })
+  const { data, loading, error } = useFetch('/motorcycles', { q: search, status, page })
 
   return (
     <div>
@@ -24,8 +23,7 @@ export default function Motors() {
             <label>Cari</label>
             <input className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Nomor rangka, nomor mesin, kode, model, nopol" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          <Select label="Status" placeholder="Semua" options={['tersedia', 'perbaikan', 'dipesan', 'terjual', 'dikembalikan']} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }} className="w-44" />
-          <Select label="Kepemilikan" placeholder="Semua" options={[{ value: 'milik', label: 'Milik showroom' }, { value: 'titipan', label: 'Titipan' }]} value={owner} onChange={(e) => { setOwner(e.target.value); setPage(1) }} className="w-44" />
+          <Select label="Status" placeholder="Semua" options={['tersedia', 'perbaikan', 'dipesan', 'terjual']} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }} className="w-44" />
           <Button variant="secondary">Cari</Button>
         </form>
         <Alert>{error}</Alert>
@@ -39,7 +37,7 @@ export default function Motors() {
                 { key: 'license_plate', label: 'Nopol', render: (r) => r.license_plate || '-' },
                 { key: 'date', label: 'Tgl beli', render: (r) => tanggal(r.purchase?.purchase_date) },
                 { key: 'price', label: 'Harga beli', right: true, render: (r) => rupiah(r.purchase?.purchase_price) },
-                { key: 'status', label: 'Status', render: (r) => <span className="flex gap-1"><Badge>{r.status}</Badge>{r.ownership_type === 'titipan' && <Badge>titipan</Badge>}</span> },
+                { key: 'status', label: 'Status', render: (r) => <Badge>{r.status}</Badge> },
               ]}
               rows={data?.data}
             />

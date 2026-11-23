@@ -15,7 +15,7 @@ export default function Purchases() {
   const [motor, setMotor] = useState(fromDss?.motor || emptyMotor)
   const [ident, setIdent] = useState(emptyIdentity)
   const [form, setForm] = useState({
-    supplier_id: '', purchase_date: today(), purchase_price: fromDss?.price || '', payment_method: 'tunai', notes: '',
+    supplier_id: '', purchase_date: today(), agreed_price: fromDss?.price || '', deduction: '', deduction_notes: '', payment_method: 'tunai', notes: '',
   })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -23,6 +23,9 @@ export default function Purchases() {
   const list = useFetch('/purchases', { page })
 
   const setI = (k) => (e) => setIdent({ ...ident, [k]: e.target.value })
+  const sepakat = Number(form.agreed_price || 0)
+  const potongan = Number(form.deduction || 0)
+  const dibayar = sepakat - potongan
 
   const submit = async (e) => {
     e.preventDefault()
@@ -30,8 +33,13 @@ export default function Purchases() {
     try {
       const { data } = await api.post('/purchases', {
         motorcycle: { ...motorPayload(motor), ...ident },
-        ...form,
         supplier_id: Number(form.supplier_id),
+        purchase_date: form.purchase_date,
+        purchase_price: dibayar,
+        agreed_price: sepakat,
+        deduction_notes: potongan > 0 ? form.deduction_notes || null : null,
+        payment_method: form.payment_method,
+        notes: form.notes,
         recommendation_id: fromDss?.recommendationId || null,
       })
       navigate(`/motor/${data.motorcycle_id}`)
@@ -63,9 +71,18 @@ export default function Purchases() {
         <Card title="Transaksi pembelian">
           <Alert>{error}</Alert>
           <div className="grid gap-4 md:grid-cols-2">
-            <PartyPicker type="supplier" value={form.supplier_id} onChange={(v) => setForm({ ...form, supplier_id: v })} />
+            <PartyPicker type="supplier" label="Penjual (perorangan atau showroom lain)" value={form.supplier_id} onChange={(v) => setForm({ ...form, supplier_id: v })} />
             <Input label="Tanggal beli" type="date" value={form.purchase_date} onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} required />
-            <MoneyInput label="Harga beli" value={form.purchase_price} onChange={(v) => setForm({ ...form, purchase_price: v })} required />
+            <MoneyInput label="Harga kesepakatan" value={form.agreed_price} onChange={(v) => setForm({ ...form, agreed_price: v })} required />
+            <MoneyInput label="Potongan biaya (pajak, perbaikan)" value={form.deduction} onChange={(v) => setForm({ ...form, deduction: v })} />
+            {potongan > 0 && (
+              <Input label="Rincian potongan" className="md:col-span-2" value={form.deduction_notes} onChange={(e) => setForm({ ...form, deduction_notes: e.target.value })} placeholder="Pajak tahunan 300.000, ganti ban 200.000" />
+            )}
+            <div className="md:col-span-2 rounded-lg bg-teal-50 p-3 text-sm">
+              <p className="text-teal-800">Dibayar ke penjual (dicatat di jurnal pembelian)</p>
+              <p className={`text-lg font-semibold ${dibayar > 0 ? 'text-teal-900' : 'text-rose-600'}`}>{rupiah(dibayar)}</p>
+              {potongan > 0 && <p className="mt-1 text-xs text-teal-800">Saat pajak atau perbaikan dibayar, catat di Biaya Kendaraan agar masuk HPP unit.</p>}
+            </div>
             <Select label="Metode bayar" options={[{ value: 'tunai', label: 'Tunai' }, { value: 'transfer', label: 'Transfer' }]} value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} />
             <Textarea label="Keterangan" className="md:col-span-2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
@@ -81,8 +98,9 @@ export default function Purchases() {
             { key: 'purchase_number', label: 'No.' },
             { key: 'purchase_date', label: 'Tanggal', render: (r) => tanggal(r.purchase_date) },
             { key: 'unit', label: 'Unit', render: (r) => <Link className="text-teal-700" to={`/motor/${r.motorcycle_id}`}>{r.motorcycle.brand} {r.motorcycle.model} {r.motorcycle.year}</Link> },
-            { key: 'supplier', label: 'Pemasok', render: (r) => r.supplier?.supplier_name },
-            { key: 'purchase_price', label: 'Harga', right: true, render: (r) => rupiah(r.purchase_price) },
+            { key: 'supplier', label: 'Penjual', render: (r) => r.supplier?.supplier_name },
+            { key: 'agreed_price', label: 'Kesepakatan', right: true, render: (r) => rupiah(r.agreed_price || r.purchase_price) },
+            { key: 'purchase_price', label: 'Dibayar', right: true, render: (r) => rupiah(r.purchase_price) },
           ]}
           rows={list.data?.data}
         />

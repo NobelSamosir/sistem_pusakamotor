@@ -33,6 +33,7 @@ class SaleController extends Controller
             'sale_type' => ['nullable', 'in:tunai,kredit'],
             'leasing_company' => ['required_if:sale_type,kredit', 'nullable', 'string', 'max:100'],
             'down_payment' => ['required_if:sale_type,kredit', 'nullable', 'numeric', 'min:0'],
+            'deposit_id' => ['nullable', 'exists:customer_deposits,id'],
             'payment_method' => ['nullable', 'in:tunai,transfer'],
             'notes' => ['nullable', 'string'],
         ]);

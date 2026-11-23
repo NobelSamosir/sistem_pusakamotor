@@ -17,8 +17,7 @@ export default function MotorDetail() {
 
   const dok = [m.has_bpkb && 'BPKB', m.has_stnk && 'STNK', m.has_faktur && 'Faktur', m.has_buku_servis && 'Buku servis'].filter(Boolean).join(', ') || 'Tidak ada'
   const sold = m.status === 'terjual'
-  const gone = sold || m.status === 'dikembalikan'
-  const titipan = m.ownership_type === 'titipan'
+  const gone = sold
   const deposit = (m.deposits || []).find((x) => x.status === 'aktif')
 
   return (
@@ -34,11 +33,6 @@ export default function MotorDetail() {
           </>
         )}
       />
-      {titipan && (
-        <Alert type="info">
-          Motor titipan {m.consignment?.consignment_number} milik {m.consignment?.consignor?.supplier_name}, diterima {tanggal(m.consignment?.received_date)} dengan harga titipan {rupiah(m.consignment?.consignor_price)}. Status titipan: {m.consignment?.status}.
-        </Alert>
-      )}
       {deposit && (
         <Alert type="warning">
           Dipesan {deposit.customer?.customer_name} dengan uang muka {rupiah(deposit.amount)} ({deposit.deposit_number}, {tanggal(deposit.deposit_date)}).
@@ -46,7 +40,7 @@ export default function MotorDetail() {
       )}
       <div className="grid gap-6 lg:grid-cols-3">
         <Card title="Identitas dan karakteristik">
-          <Row k="Status" v={<span className="flex justify-end gap-1"><Badge>{m.status}</Badge>{titipan && <Badge>titipan</Badge>}</span>} />
+          <Row k="Status" v={<Badge>{m.status}</Badge>} />
           <Row k="Nomor mesin" v={m.engine_number} />
           <Row k="Nomor polisi" v={m.license_plate || '-'} />
           <Row k="Nomor BPKB" v={m.bpkb_number || '-'} />
@@ -59,10 +53,8 @@ export default function MotorDetail() {
           <Row k="Dokumen" v={dok} />
         </Card>
 
-        <Card title={titipan ? 'Harga titipan dan biaya' : 'HPP unit (identifikasi khusus)'} className="lg:col-span-2">
-          {titipan
-            ? <Row k={`Harga titipan (${m.consignment?.consignor?.supplier_name || '-'})`} v={rupiah(m.consignment?.consignor_price)} />
-            : <Row k={`Harga beli (${tanggal(m.purchase?.purchase_date)}, dari ${m.purchase?.supplier?.supplier_name || '-'})`} v={rupiah(m.purchase?.purchase_price)} />}
+        <Card title="HPP unit (identifikasi khusus)" className="lg:col-span-2">
+          <Row k={`Harga beli (${tanggal(m.purchase?.purchase_date)}, dari ${m.purchase?.supplier?.supplier_name || '-'})`} v={rupiah(m.purchase?.purchase_price)} />
           <Table
             columns={[
               { key: 'cost_date', label: 'Tanggal', render: (r) => tanggal(r.cost_date) },
@@ -75,13 +67,13 @@ export default function MotorDetail() {
             empty="Belum ada biaya kendaraan."
           />
           <div className="mt-3 flex justify-between rounded-lg bg-teal-50 px-4 py-3 font-semibold text-teal-900">
-            <span>{titipan ? 'Harga titipan' : `HPP ${sold ? 'saat dijual' : 'berjalan'}`}</span>
+            <span>HPP {sold ? 'saat dijual' : 'berjalan'}</span>
             <span>{rupiah(sold ? m.sale?.hpp_amount : m.hpp_current)}</span>
           </div>
           {sold && m.sale && (
             <div className="mt-4 grid gap-3 md:grid-cols-4">
               <div><p className="text-xs text-slate-500">Harga jual</p><p className="font-semibold">{rupiah(m.sale.sale_price)}</p></div>
-              <div><p className="text-xs text-slate-500">{titipan ? 'Komisi titip jual' : 'Laba kotor'}</p><p className="font-semibold text-emerald-700">{rupiah(m.sale.gross_profit)}</p></div>
+              <div><p className="text-xs text-slate-500">Laba kotor</p><p className="font-semibold text-emerald-700">{rupiah(m.sale.gross_profit)}</p></div>
               <div><p className="text-xs text-slate-500">Margin</p><p className="font-semibold">{persen(m.sale.gross_profit / m.sale.sale_price)}</p></div>
               <div><p className="text-xs text-slate-500">Pembeli</p><p className="font-semibold">{m.sale.customer?.customer_name} · {tanggal(m.sale.sale_date)}</p></div>
               {m.sale.sale_type === 'kredit' && (

@@ -25,7 +25,6 @@ class ReportService
                 $join->on('c.motorcycle_id', '=', 'm.id')->where('c.hpp_included', true);
             })
             ->whereIn('m.status', Motorcycle::STATUS_DI_SHOWROOM)
-            ->where('m.ownership_type', Motorcycle::MILIK)
             ->groupBy('m.id', 'm.vehicle_code', 'm.frame_number', 'm.brand', 'm.model', 'm.year', 'm.color', 'm.status', 'p.purchase_date', 'p.purchase_price')
             ->orderBy('p.purchase_date')
             ->selectRaw('m.id, m.vehicle_code, m.frame_number, m.brand, m.model, m.year, m.color, m.status,
@@ -51,18 +50,9 @@ class ReportService
             ];
         })->values();
 
-        $titipan = DB::table('consignments as c')
-            ->join('motorcycles as m', 'm.id', '=', 'c.motorcycle_id')
-            ->join('suppliers as s', 's.id', '=', 'c.consignor_id')
-            ->where('c.status', 'dititipkan')
-            ->orderBy('c.received_date')
-            ->selectRaw("m.id, m.vehicle_code, m.frame_number, m.brand || ' ' || m.model || ' ' || m.year as unit,
-                m.status, c.consignment_number, c.received_date, s.supplier_name as consignor, c.consignor_price")
-            ->get();
 
         return [
             'items' => $items,
-            'consignments' => $titipan,
             'total_units' => $items->count(),
             'total_hpp' => Money::str($items->reduce(fn ($t, $i) => $t->plus(Money::of($i['hpp'])), Money::of(0))),
         ];
@@ -79,7 +69,7 @@ class ReportService
             ->whereBetween('p.purchase_date', [$from, $to])
             ->orderBy('p.purchase_date')->orderBy('p.id')
             ->selectRaw("p.purchase_number, p.purchase_date, m.vehicle_code, m.frame_number,
-                m.brand || ' ' || m.model || ' ' || m.year as unit, s.supplier_name, p.purchase_price")
+                m.brand || ' ' || m.model || ' ' || m.year as unit, s.supplier_name, p.purchase_price, p.agreed_price, p.deduction_notes")
             ->get();
 
         $sales = DB::table('sales as s')
@@ -89,12 +79,11 @@ class ReportService
             ->orderBy('s.sale_date')->orderBy('s.id')
             ->selectRaw("s.sale_number, s.sale_date, m.vehicle_code, m.frame_number,
                 m.brand || ' ' || m.model || ' ' || m.year as unit, c.customer_name,
-                s.sale_price, s.hpp_amount, s.gross_profit, s.sale_type, s.leasing_company,
-                s.is_consignment, s.consignor_payable")
+                s.sale_price, s.hpp_amount, s.gross_profit, s.sale_type, s.leasing_company")
             ->get()
             ->map(function ($r) {
                 $profit = Money::of($r->gross_profit);
-                $r->markup = ($r->is_consignment || Money::of($r->hpp_amount)->isZero()) ? null
+                $r->markup = Money::of($r->hpp_amount)->isZero() ? null
                     : (string) $profit->dividedBy(Money::of($r->hpp_amount), 4, \Brick\Math\RoundingMode::HALF_UP);
                 $r->margin = (string) $profit->dividedBy(Money::of($r->sale_price), 4, \Brick\Math\RoundingMode::HALF_UP);
 
@@ -131,8 +120,6 @@ class ReportService
         $grossProfit = $revenue->minus($cogs);
         $other = [
             'leasing_commission' => $b[Account::KOMISI_LEASING],
-            'consignment_commission' => $b[Account::KOMISI_TITIP],
-            'document_service' => $b[Account::JASA_SURAT],
             'other' => $b[Account::PENDAPATAN_LAIN],
         ];
         $otherTotal = array_reduce($other, fn ($t, $v) => $t->plus($v), Money::of(0));
@@ -163,13 +150,12 @@ class ReportService
         $assets = $cash->plus($receivable)->plus($inventory)->plus($supplies);
 
         $deposits = $b[Account::UANG_MUKA];
-        $consignPayable = $b[Account::UTANG_KONSINYASI];
-        $liabilities = $deposits->plus($consignPayable);
+        $liabilities = $deposits;
 
         $capital = $b[Account::MODAL];
         $prive = $b[Account::PRIVE];
-        $profit = $b[Account::PENDAPATAN]->plus($b[Account::KOMISI_LEASING])->plus($b[Account::KOMISI_TITIP])
-            ->plus($b[Account::PENDAPATAN_LAIN])->plus($b[Account::JASA_SURAT])->minus($b[Account::HPP])->minus($b[Account::BEBAN_OPERASIONAL]);
+        $profit = $b[Account::PENDAPATAN]->plus($b[Account::KOMISI_LEASING])
+            ->plus($b[Account::PENDAPATAN_LAIN])->minus($b[Account::HPP])->minus($b[Account::BEBAN_OPERASIONAL]);
         $equity = $capital->minus($prive)->plus($profit);
 
         return [
@@ -183,7 +169,6 @@ class ReportService
             ],
             'liabilities' => [
                 'customer_deposits' => Money::str($deposits),
-                'consignment_payable' => Money::str($consignPayable),
                 'total' => Money::str($liabilities),
             ],
             'equity' => [
@@ -222,7 +207,6 @@ class ReportService
             'leasing_commissions' => $get(JournalEntry::REF_LEASING_COMMISSION),
             'document_services' => $get(JournalEntry::REF_DOCUMENT_SERVICE),
             'customer_deposits' => $get(JournalEntry::REF_DEPOSIT),
-            'consignment_payouts' => $get(JournalEntry::REF_CONSIGNMENT_PAYOUT),
             'motorcycle_purchases' => $get(JournalEntry::REF_PURCHASE),
             'vehicle_costs' => $get(JournalEntry::REF_VEHICLE_COST),
             'supply_purchases' => $get(JournalEntry::REF_SUPPLY_PURCHASE),
@@ -274,8 +258,8 @@ class ReportService
             $result[$r->account_code] = $r->normal_balance === 'debit' ? $debit->minus($credit) : $credit->minus($debit);
         }
         foreach ([Account::KAS, Account::PIUTANG_LEASING, Account::PERSEDIAAN, Account::PERLENGKAPAN,
-            Account::UANG_MUKA, Account::UTANG_KONSINYASI, Account::MODAL, Account::PRIVE, Account::PENDAPATAN,
-            Account::KOMISI_LEASING, Account::KOMISI_TITIP, Account::PENDAPATAN_LAIN, Account::JASA_SURAT, Account::HPP,
+            Account::UANG_MUKA, Account::MODAL, Account::PRIVE, Account::PENDAPATAN,
+            Account::KOMISI_LEASING, Account::PENDAPATAN_LAIN, Account::HPP,
             Account::BEBAN_OPERASIONAL] as $code) {
             $result[$code] ??= Money::of(0);
         }

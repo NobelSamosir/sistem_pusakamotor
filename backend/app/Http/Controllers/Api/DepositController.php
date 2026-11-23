@@ -15,6 +15,8 @@ class DepositController extends Controller
     {
         return response()->json(
             CustomerDeposit::with(['motorcycle:id,vehicle_code,brand,model,year,frame_number,status', 'customer:id,customer_name,phone'])
+                ->when($request->query('customer_id'), fn ($q, $v) => $q->where('customer_id', $v))
+                ->when($request->boolean('unlinked'), fn ($q) => $q->whereNull('motorcycle_id'))
                 ->when($request->query('status'), fn ($q, $v) => $q->where('status', $v))
                 ->when($request->query('motorcycle_id'), fn ($q, $v) => $q->where('motorcycle_id', $v))
                 ->orderByRaw("CASE WHEN status = 'aktif' THEN 0 ELSE 1 END")
@@ -26,7 +28,8 @@ class DepositController extends Controller
     public function store(Request $request, DepositService $service): JsonResponse
     {
         $data = $request->validate([
-            'motorcycle_id' => ['required', 'exists:motorcycles,id'],
+            'motorcycle_id' => ['nullable', 'exists:motorcycles,id'],
+            'unit_description' => ['required_without:motorcycle_id', 'nullable', 'string', 'max:255'],
             'customer_id' => ['required', 'exists:customers,id'],
             'deposit_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'gt:0'],

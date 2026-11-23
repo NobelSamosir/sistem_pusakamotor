@@ -5,7 +5,8 @@ import useFetch from '../lib/useFetch'
 import { persen, rupiah, tanggal, today } from '../lib/format'
 import MotorPicker from '../components/MotorPicker'
 import PartyPicker from '../components/PartyPicker'
-import { Alert, Badge, Button, Card, Input, MoneyInput, PageHeader, Pagination, Select, Table, Tabs, Textarea } from '../components/ui'
+import LeasingInput from '../components/LeasingInput'
+import { Alert, Badge, Button, Card, Checkbox, Input, MoneyInput, PageHeader, Pagination, Select, Table, Tabs, Textarea } from '../components/ui'
 
 const Info = ({ label, value, tone = '' }) => (
   <div><p className="text-slate-500">{label}</p><p className={`font-semibold ${tone}`}>{value}</p></div>
@@ -15,24 +16,29 @@ export default function Sales() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const [form, setForm] = useState({
-    motorcycle_id: params.get('motor') || '', customer_id: '', sale_date: today(),
+    motorcycle_id: params.get('motor') || '', customer_id: params.get('pelanggan') || '', sale_date: today(),
     sale_price: params.get('harga') ? Number(params.get('harga')) : '', sale_type: 'tunai',
     leasing_company: '', down_payment: '', payment_method: 'tunai', notes: '',
   })
+  const [pakaiPesanan, setPakaiPesanan] = useState(true)
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
   const list = useFetch('/sales', { page })
   const unit = useFetch(form.motorcycle_id ? `/motorcycles/${form.motorcycle_id}` : null)
 
   const m = unit.data
-  const titipan = m?.ownership_type === 'titipan'
-  const deposit = (m?.deposits || []).find((d) => d.status === 'aktif')
   const kredit = form.sale_type === 'kredit'
+  // Uang muka yang sudah terikat ke unit ini
+  const depositUnit = (m?.deposits || []).find((d) => d.status === 'aktif')
+  // Uang muka pelanggan yang dibayar sebelum unitnya ada
+  const pesanan = useFetch(!depositUnit && form.customer_id ? '/deposits' : null, { customer_id: form.customer_id, status: 'aktif', unlinked: 1 })
+  const depositPesanan = !depositUnit ? pesanan.data?.data?.[0] : null
+  const deposit = depositUnit || (pakaiPesanan ? depositPesanan : null)
 
-  // Uang muka aktif mengikat pelanggan: isi otomatis supaya tidak salah pilih.
+  // Uang muka yang terikat ke unit menentukan pelanggannya
   useEffect(() => {
-    if (deposit) setForm((f) => ({ ...f, customer_id: String(deposit.customer_id) }))
-  }, [deposit?.id])
+    if (depositUnit) setForm((f) => ({ ...f, customer_id: String(depositUnit.customer_id) }))
+  }, [depositUnit?.id])
 
   const hpp = Number(m?.hpp_current || 0)
   const price = Number(form.sale_price || 0)
@@ -51,6 +57,7 @@ export default function Sales() {
     try {
       const body = { ...form, motorcycle_id: Number(form.motorcycle_id), customer_id: Number(form.customer_id) }
       if (!kredit) { delete body.leasing_company; delete body.down_payment }
+      if (!depositUnit && pakaiPesanan && depositPesanan) body.deposit_id = depositPesanan.id
       await api.post('/sales', body)
       navigate(`/motor/${form.motorcycle_id}`)
     } catch (err) { setError(errorMessage(err)) }
@@ -58,9 +65,7 @@ export default function Sales() {
 
   return (
     <div>
-      <PageHeader
-        title="Penjualan Motor"
-      />
+      <PageHeader title="Penjualan Motor" />
       <Card>
         <Alert>{error}</Alert>
         <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
@@ -76,39 +81,34 @@ export default function Sales() {
             <div className="md:col-span-2 grid gap-3 rounded-lg bg-slate-50 p-4 text-sm md:grid-cols-4">
               <Info label="Nomor rangka" value={m.frame_number} />
               <Info label="Nomor mesin" value={m.engine_number} />
-              {titipan ? (
-                <>
-                  <Info label={`Harga titipan (${m.consignment?.consignor?.supplier_name || 'pemilik'})`} value={rupiah(hpp)} tone="text-violet-800" />
-                  <Info label="Komisi titip jual" value={laba === null ? '-' : rupiah(laba)} tone={laba !== null && laba < 0 ? 'text-rose-600' : 'text-emerald-700'} />
-                </>
-              ) : (
-                <>
-                  <Info label="HPP unit" value={rupiah(hpp)} tone="text-teal-800" />
-                  <Info
-                    label="Laba / margin"
-                    value={laba === null ? '-' : `${rupiah(laba)} · ${persen(laba / price)}`}
-                    tone={laba !== null && laba < 0 ? 'text-rose-600' : 'text-emerald-700'}
-                  />
-                </>
-              )}
-              {titipan && (
-                <p className="md:col-span-4 text-xs text-violet-800">
-                  Unit titipan: hasil jual sebesar harga titipan menjadi utang kepada pemilik motor, selisihnya menjadi pendapatan komisi showroom.
-                </p>
-              )}
-              {deposit && (
+              <Info label="HPP unit" value={rupiah(hpp)} tone="text-teal-800" />
+              <Info
+                label="Laba / margin"
+                value={laba === null ? '-' : `${rupiah(laba)} · ${persen(laba / price)}`}
+                tone={laba !== null && laba < 0 ? 'text-rose-600' : 'text-emerald-700'}
+              />
+              {depositUnit && (
                 <p className="md:col-span-4 rounded-md bg-sky-50 px-3 py-2 text-sky-800">
-                  Unit ini sudah dipesan {deposit.customer?.customer_name} dengan uang muka {rupiah(deposit.amount)} ({deposit.deposit_number}, {tanggal(deposit.deposit_date)}). Uang muka otomatis dipotong dari pembayaran.
+                  Unit ini sudah dipesan {depositUnit.customer?.customer_name} dengan uang muka {rupiah(depositUnit.amount)} ({depositUnit.deposit_number}, {tanggal(depositUnit.deposit_date)}). Uang muka otomatis dipotong dari pembayaran.
                 </p>
               )}
             </div>
           )}
           <PartyPicker type="customer" value={form.customer_id} onChange={(v) => setForm({ ...form, customer_id: v })} />
           <Input label="Tanggal jual" type="date" value={form.sale_date} onChange={(e) => setForm({ ...form, sale_date: e.target.value })} required />
+          {depositPesanan && (
+            <div className="md:col-span-2 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-800">
+              <Checkbox
+                label={`Pakai uang muka pesanan ${depositPesanan.deposit_number} sebesar ${rupiah(depositPesanan.amount)} (${depositPesanan.unit_description}, ${tanggal(depositPesanan.deposit_date)})`}
+                checked={pakaiPesanan}
+                onChange={(e) => setPakaiPesanan(e.target.checked)}
+              />
+            </div>
+          )}
           <MoneyInput label="Harga jual (on the road ke pelanggan)" value={form.sale_price} onChange={(v) => setForm({ ...form, sale_price: v })} required />
-          {kredit ? (
+          {kredit && (
             <>
-              <Input label="Perusahaan leasing" value={form.leasing_company} onChange={(e) => setForm({ ...form, leasing_company: e.target.value })} placeholder="FIF, Adira, WOM, BAF..." required />
+              <LeasingInput value={form.leasing_company} onChange={(v) => setForm({ ...form, leasing_company: v })} />
               <MoneyInput
                 label="DP dari pelanggan"
                 hint={um ? `Termasuk uang muka ${rupiah(um)} yang sudah dibayar` : 'Dibayar pelanggan langsung ke showroom'}
@@ -117,7 +117,7 @@ export default function Sales() {
                 required
               />
             </>
-          ) : null}
+          )}
           <Select label="Metode bayar" options={[{ value: 'tunai', label: 'Tunai' }, { value: 'transfer', label: 'Transfer' }]} value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} />
           {price > 0 && (
             <div className="md:col-span-2 grid gap-3 rounded-lg border border-teal-100 bg-teal-50/60 p-4 text-sm md:grid-cols-3">
@@ -137,17 +137,11 @@ export default function Sales() {
             { key: 'sale_date', label: 'Tanggal', render: (r) => tanggal(r.sale_date) },
             { key: 'unit', label: 'Unit', render: (r) => `${r.motorcycle.brand} ${r.motorcycle.model} ${r.motorcycle.year}` },
             { key: 'customer', label: 'Pelanggan', render: (r) => r.customer?.customer_name },
-            {
-              key: 'type', label: 'Jenis', render: (r) => (
-                <span className="flex flex-wrap gap-1">
-                  <Badge>{r.sale_type || 'tunai'}</Badge>
-                  {r.is_consignment && <Badge>titipan</Badge>}
-                </span>
-              ),
-            },
+            { key: 'type', label: 'Jenis', render: (r) => <Badge>{r.sale_type || 'tunai'}</Badge> },
+            { key: 'leasing_company', label: 'Leasing', render: (r) => r.leasing_company || '-' },
             { key: 'sale_price', label: 'Harga jual', right: true, render: (r) => rupiah(r.sale_price) },
-            { key: 'hpp_amount', label: 'HPP / titipan', right: true, render: (r) => rupiah(r.is_consignment ? r.consignor_payable : r.hpp_amount) },
-            { key: 'gross_profit', label: 'Laba / komisi', right: true, render: (r) => rupiah(r.is_consignment ? r.consignment_commission : r.gross_profit) },
+            { key: 'hpp_amount', label: 'HPP', right: true, render: (r) => rupiah(r.hpp_amount) },
+            { key: 'gross_profit', label: 'Laba kotor', right: true, render: (r) => rupiah(r.gross_profit) },
           ]}
           rows={list.data?.data}
         />

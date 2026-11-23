@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Pembelian unit: simpan motor + pembelian + jurnal (Dr Persediaan / Cr Kas)
- * dalam SATU transaksi database.
+ * dalam SATU transaksi database. Jurnal sebesar uang yang benar-benar dibayar ke penjual;
+ * selisih dengan harga kesepakatan (pajak, perbaikan) dicatat sebagai Biaya Kendaraan
+ * masuk HPP saat showroom membayarnya.
  */
 class PurchaseService
 {
@@ -21,7 +23,8 @@ class PurchaseService
 
     /**
      * @param array $motor    data motorcycles (frame_number, engine_number, brand, model, year, ...)
-     * @param array $purchase supplier_id, purchase_date (Y-m-d), purchase_price, payment_method?, notes?
+     * @param array $purchase supplier_id, purchase_date (Y-m-d), purchase_price (yang dibayar ke penjual),
+     *                        agreed_price? (harga kesepakatan), deduction_notes? (rincian potongan), payment_method?, notes?
      */
     public function create(array $motor, array $purchase, ?int $userId = null, ?int $recommendationId = null): Purchase
     {
@@ -37,8 +40,12 @@ class PurchaseService
         if (! Money::of($purchase['purchase_price'] ?? 0)->isPositive()) {
             throw new BusinessRuleException('Harga beli harus lebih dari 0.');
         }
+        $agreed = isset($purchase['agreed_price']) && $purchase['agreed_price'] !== '' ? Money::of($purchase['agreed_price']) : null;
+        if ($agreed && $agreed->isLessThan(Money::of($purchase['purchase_price']))) {
+            throw new BusinessRuleException('Harga kesepakatan tidak boleh lebih kecil dari uang yang dibayar ke penjual.');
+        }
 
-        return DB::transaction(function () use ($motor, $purchase, $userId, $recommendationId) {
+        return DB::transaction(function () use ($motor, $purchase, $userId, $recommendationId, $agreed) {
             $date = $purchase['purchase_date'];
 
             $motorcycle = Motorcycle::create($motor + [
@@ -53,6 +60,8 @@ class PurchaseService
                 'user_id' => $userId,
                 'purchase_date' => $date,
                 'purchase_price' => Money::str(Money::of($purchase['purchase_price'])),
+                'agreed_price' => $agreed ? Money::str($agreed) : null,
+                'deduction_notes' => $purchase['deduction_notes'] ?? null,
                 'payment_method' => $purchase['payment_method'] ?? 'tunai',
                 'notes' => $purchase['notes'] ?? null,
             ]);

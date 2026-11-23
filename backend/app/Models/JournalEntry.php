@@ -17,7 +17,6 @@ class JournalEntry extends Model
     public const REF_LEASING_DISBURSEMENT = 'leasing_disbursement';
     public const REF_LEASING_COMMISSION = 'leasing_commission';
     public const REF_DEPOSIT = 'deposit';
-    public const REF_CONSIGNMENT_PAYOUT = 'consignment_payout';
     public const REF_SUPPLY_PURCHASE = 'supply_purchase';
     public const REF_DOCUMENT_SERVICE = 'document_service';
 

@@ -5,7 +5,7 @@ import useFetch from '../lib/useFetch'
 const menu = [
   { group: 'Utama', items: [['/', 'Dashboard'], ['/motor', 'Data Motor']] },
   { group: 'Transaksi', items: [['/pembelian', 'Pembelian'], ['/biaya', 'Biaya Kendaraan'], ['/penjualan', 'Penjualan'], ['/beban', 'Beban Operasional']] },
-  { group: 'Transaksi lain', items: [['/uang-muka', 'Uang Muka'], ['/leasing', 'Kredit Leasing'], ['/titip-jual', 'Titip Jual'], ['/perlengkapan', 'Perlengkapan'], ['/jasa-surat', 'Jasa Surat']] },
+  { group: 'Transaksi lain', items: [['/uang-muka', 'Uang Muka'], ['/leasing', 'Kredit Leasing'], ['/perlengkapan', 'Perlengkapan'], ['/pendapatan-lain', 'Pendapatan Lain']] },
   { group: 'DSS', items: [['/prediksi', 'Prediksi Harga'], ['/rekomendasi', 'Rekomendasi Harga']] },
   { group: 'Akuntansi', items: [['/laporan', 'Laporan Keuangan'], ['/jurnal', 'Jurnal, Modal, Prive']] },
   { group: 'Lainnya', items: [['/master', 'Data Master']] },

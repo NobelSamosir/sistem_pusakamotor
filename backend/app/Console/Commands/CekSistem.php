@@ -39,8 +39,8 @@ class CekSistem extends Command
             'operating_expenses' => 'Beban operasional', 'journal_entries' => 'Jurnal',
             'journal_lines' => 'Baris jurnal', 'price_predictions' => 'Prediksi harga',
             'price_recommendations' => 'Rekomendasi DSS',
-            'customer_deposits' => 'Uang muka pelanggan', 'consignments' => 'Titip jual',
-            'supply_purchases' => 'Pembelian perlengkapan', 'document_services' => 'Jasa pengurusan surat',
+            'customer_deposits' => 'Uang muka pelanggan',
+            'supply_purchases' => 'Pembelian perlengkapan', 'document_services' => 'Jasa lain (surat, pinjaman)',
         ];
         $rows = [];
         foreach ($tabel as $t => $label) {
@@ -61,7 +61,7 @@ class CekSistem extends Command
         // Daftar kesiapan data awal
         $cek = [
             ['Akun login pemilik', DB::table('users')->where('is_active', true)->exists()],
-            ['15 akun (6 akun Tabel 3.8 + 9 akun perluasan)', Account::count() >= 15],
+            ['12 akun (6 akun Tabel 3.8 + 6 akun perluasan)', Account::count() >= 12],
             ['Model ML aktif', (bool) MlModel::active()],
             ['Setoran modal awal sudah dicatat', DB::table('journal_entries')->where('reference_type', 'manual')->exists()],
             ['Saldo kas tidak minus', (float) $b['assets']['cash'] >= 0],

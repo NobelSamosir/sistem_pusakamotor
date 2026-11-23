@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\ConsignmentController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DepositController;
@@ -57,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Penjualan kredit (leasing)
     Route::get('/leasing', [LeasingController::class, 'index']);
+    Route::get('/leasing/companies', [LeasingController::class, 'companies']);
     Route::post('/leasing/{sale}/disburse', [LeasingController::class, 'disburse']);
     Route::post('/leasing/{sale}/commission', [LeasingController::class, 'commission']);
 
@@ -66,13 +66,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/deposits/{deposit}/refund', [DepositController::class, 'refund']);
     Route::post('/deposits/{deposit}/forfeit', [DepositController::class, 'forfeit']);
 
-    // Titip jual (konsinyasi)
-    Route::get('/consignments', [ConsignmentController::class, 'index']);
-    Route::post('/consignments', [ConsignmentController::class, 'store']);
-    Route::post('/consignments/{consignment}/return', [ConsignmentController::class, 'returnToOwner']);
-    Route::post('/consignments/{consignment}/payout', [ConsignmentController::class, 'payout']);
 
-    // Jasa pengurusan surat (STNK, pajak, balik nama)
+    // Pendapatan lain-lain: pengurusan surat, pengantaran pinjaman, bonus leasing
     Route::get('/document-services', [DocumentServiceController::class, 'index']);
     Route::post('/document-services', [DocumentServiceController::class, 'store']);
 

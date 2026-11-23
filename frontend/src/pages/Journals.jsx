@@ -7,7 +7,7 @@ import { Alert, Button, Card, Input, Loading, MoneyInput, PageHeader, Pagination
 const ref = {
   purchase: 'Pembelian', vehicle_cost: 'Biaya kendaraan', sale: 'Penjualan', operating_expense: 'Beban', manual: 'Setoran modal',
   prive: 'Prive', leasing_disbursement: 'Pencairan leasing', leasing_commission: 'Komisi leasing', deposit: 'Uang muka',
-  consignment_payout: 'Pelunasan titipan', supply_purchase: 'Pembelian perlengkapan', document_service: 'Jasa surat',
+  supply_purchase: 'Pembelian perlengkapan', document_service: 'Pendapatan lain',
 }
 
 export default function Journals() {

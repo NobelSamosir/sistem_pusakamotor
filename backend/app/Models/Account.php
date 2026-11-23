@@ -18,12 +18,9 @@ class Account extends Model
     public const PIUTANG_LEASING = '1102';
     public const PERLENGKAPAN = '1301';
     public const UANG_MUKA = '2101';
-    public const UTANG_KONSINYASI = '2102';
     public const PRIVE = '3102';
     public const KOMISI_LEASING = '4201';
-    public const KOMISI_TITIP = '4202';
     public const PENDAPATAN_LAIN = '4203';
-    public const JASA_SURAT = '4204';
 
     protected $fillable = ['account_code', 'account_name', 'account_type', 'normal_balance', 'parent_id', 'is_active'];
 

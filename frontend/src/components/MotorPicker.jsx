@@ -2,13 +2,13 @@ import useFetch from '../lib/useFetch'
 import { Select } from './ui'
 
 /**
- * Pilih unit yang masih ada di showroom (tersedia, perbaikan, dipesan), milik sendiri maupun titipan.
+ * Pilih unit yang masih ada di showroom (tersedia, perbaikan, dipesan).
  * exclude: daftar status yang disembunyikan, misalnya ['dipesan'] untuk form uang muka.
  */
-export default function MotorPicker({ value, onChange, label = 'Unit motor', exclude = [], ownership }) {
-  const { data } = useFetch('/motorcycles', { in_showroom: 1, per_page: 200, ...(ownership ? { ownership_type: ownership } : {}) })
+export default function MotorPicker({ value, onChange, label = 'Unit motor', exclude = [], required = true }) {
+  const { data } = useFetch('/motorcycles', { in_showroom: 1, per_page: 200 })
   const rows = (data?.data || []).filter((m) => !exclude.includes(m.status))
-  const tag = (m) => [m.ownership_type === 'titipan' && 'titipan', m.status !== 'tersedia' && m.status].filter(Boolean).join(', ')
+  const tag = (m) => (m.status !== 'tersedia' ? m.status : '')
   return (
     <Select
       label={label}
@@ -18,7 +18,7 @@ export default function MotorPicker({ value, onChange, label = 'Unit motor', exc
       }))}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      required
+      required={required}
     />
   )
 }

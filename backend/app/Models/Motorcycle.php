@@ -12,10 +12,6 @@ class Motorcycle extends Model
     public const STATUS_PERBAIKAN = 'perbaikan';
     public const STATUS_TERJUAL = 'terjual';
     public const STATUS_DIPESAN = 'dipesan';
-    public const STATUS_DIKEMBALIKAN = 'dikembalikan';
-
-    public const MILIK = 'milik';
-    public const TITIPAN = 'titipan';
 
     /** Status yang berarti motor masih ada di showroom dan bisa dijual. */
     public const STATUS_DI_SHOWROOM = ['tersedia', 'perbaikan', 'dipesan'];
@@ -24,7 +20,7 @@ class Motorcycle extends Model
         'vehicle_code', 'frame_number', 'engine_number', 'license_plate', 'bpkb_number',
         'brand', 'model', 'year', 'transmission', 'engine_capacity', 'body_type',
         'mileage', 'ownership_status', 'has_bpkb', 'has_stnk', 'has_faktur', 'has_buku_servis',
-        'color', 'condition_notes', 'status', 'ownership_type',
+        'color', 'condition_notes', 'status',
     ];
 
     protected function casts(): array
@@ -64,11 +60,6 @@ class Motorcycle extends Model
         return $this->hasMany(PriceRecommendation::class);
     }
 
-    public function consignment(): HasOne
-    {
-        return $this->hasOne(Consignment::class);
-    }
-
     public function deposits(): HasMany
     {
         return $this->hasMany(CustomerDeposit::class);
@@ -77,11 +68,6 @@ class Motorcycle extends Model
     public function activeDeposit(): HasOne
     {
         return $this->hasOne(CustomerDeposit::class)->where('status', CustomerDeposit::AKTIF);
-    }
-
-    public function isConsignment(): bool
-    {
-        return $this->ownership_type === self::TITIPAN;
     }
 
     public function isInShowroom(): bool

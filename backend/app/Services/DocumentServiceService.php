@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Jasa pengurusan surat. Showroom bertindak sebagai perantara (agen), sehingga
  * uang yang diteruskan ke Samsat bukan pendapatan; yang dijurnal hanya upah jasa:
- *   Dr Kas / Cr Pendapatan Jasa Pengurusan Surat (sebesar upah).
+ *   Dr Kas / Cr Pendapatan Lain-lain (sebesar upah).
  */
 class DocumentServiceService
 {
@@ -44,12 +44,15 @@ class DocumentServiceService
                 'fee' => Money::str($fee),
             ]);
 
-            $label = str_replace('_', ' ', $s->service_type);
+            $label = [
+                'pengantaran_pinjaman' => 'Komisi pengantaran pinjaman',
+                'bonus_leasing' => 'Bonus tahunan leasing',
+            ][$s->service_type] ?? 'Upah jasa '.str_replace('_', ' ', $s->service_type);
             $this->journal->post($s->service_date->toDateString(),
-                "Upah jasa {$label}".($s->license_plate ? " {$s->license_plate}" : ''),
+                $label.($s->license_plate ? " {$s->license_plate}" : '').($s->description ? " - {$s->description}" : ''),
                 JournalEntry::REF_DOCUMENT_SERVICE, $s->id, [
                     ['account' => Account::KAS, 'debit' => $s->fee],
-                    ['account' => Account::JASA_SURAT, 'credit' => $s->fee],
+                    ['account' => Account::PENDAPATAN_LAIN, 'credit' => $s->fee],
                 ], $userId);
 
             return $s->load('customer');

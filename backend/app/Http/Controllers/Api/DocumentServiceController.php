@@ -9,7 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
-/** Jasa pengurusan surat kendaraan. */
+/** Pendapatan lain-lain: jasa pengurusan surat, pengantaran pinjaman, bonus leasing. */
 class DocumentServiceController extends Controller
 {
     public function index(Request $request): JsonResponse
