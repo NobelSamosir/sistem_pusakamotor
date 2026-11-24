@@ -52,6 +52,7 @@ class CustomerController extends Controller
             'customer_name' => ['required', 'string', 'max:150'],
             'customer_type' => ['nullable', 'in:perorangan,dealer'],
             'phone' => ['nullable', 'string', 'max:30'],
+            'id_number' => ['nullable', 'digits:16'],
             'address' => ['nullable', 'string'],
         ]);
     }

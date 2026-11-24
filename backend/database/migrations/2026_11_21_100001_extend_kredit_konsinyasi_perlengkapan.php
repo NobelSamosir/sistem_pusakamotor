@@ -143,18 +143,22 @@ return new class extends Migration
         if (DB::getDriverName() === 'pgsql') {
             DB::statement('ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_type_check');
         }
-        Schema::table('sales', fn (Blueprint $t) => $t->dropColumn([
+        // Kolom titip jual mungkin sudah dihapus oleh migrasi revisi 2026_11_24
+        $cols = array_values(array_filter([
             'sale_type', 'leasing_company', 'down_payment', 'financed_amount', 'disbursement_status', 'disbursed_at',
             'leasing_commission', 'commission_received_at', 'deposit_applied', 'is_consignment',
             'consignor_payable', 'consignment_commission',
-        ]));
+        ], fn ($c) => Schema::hasColumn('sales', $c)));
+        Schema::table('sales', fn (Blueprint $t) => $t->dropColumn($cols));
 
         if (DB::getDriverName() === 'pgsql') {
             DB::statement('ALTER TABLE motorcycles DROP CONSTRAINT IF EXISTS motorcycles_ownership_check');
             DB::statement('ALTER TABLE motorcycles DROP CONSTRAINT IF EXISTS motorcycles_status_check');
             DB::statement("ALTER TABLE motorcycles ADD CONSTRAINT motorcycles_status_check CHECK (status IN ('tersedia','perbaikan','terjual'))");
         }
-        Schema::table('motorcycles', fn (Blueprint $t) => $t->dropColumn('ownership_type'));
+        if (Schema::hasColumn('motorcycles', 'ownership_type')) {
+            Schema::table('motorcycles', fn (Blueprint $t) => $t->dropColumn('ownership_type'));
+        }
 
         DB::table('accounts')->whereIn('account_code', array_column($this->newAccounts, 0))->delete();
     }

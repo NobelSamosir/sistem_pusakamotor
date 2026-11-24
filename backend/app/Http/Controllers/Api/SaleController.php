@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Sale;
 use App\Services\SaleService;
+use App\Services\PartyResolver;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -23,11 +25,12 @@ class SaleController extends Controller
         );
     }
 
-    public function store(Request $request, SaleService $service): JsonResponse
+    public function store(Request $request, SaleService $service, PartyResolver $parties): JsonResponse
     {
         $data = $request->validate([
             'motorcycle_id' => ['required', 'exists:motorcycles,id'],
-            'customer_id' => ['required', 'exists:customers,id'],
+            // customer_id dipakai bila pembeli sudah membayar uang muka; selain itu identitas diisi di form (buyer)
+            'customer_id' => ['nullable', 'required_without:buyer', 'exists:customers,id'],
             'sale_date' => ['required', 'date'],
             'sale_price' => ['required', 'numeric', 'gt:0'],
             'sale_type' => ['nullable', 'in:tunai,kredit'],
@@ -36,9 +39,15 @@ class SaleController extends Controller
             'deposit_id' => ['nullable', 'exists:customer_deposits,id'],
             'payment_method' => ['nullable', 'in:tunai,transfer'],
             'notes' => ['nullable', 'string'],
-        ]);
+        ] + PartyResolver::rules('buyer.', 'customers', false));
 
-        $sale = $service->create($data, $request->user()->id);
+        $sale = DB::transaction(function () use ($data, $service, $parties, $request) {
+            if (empty($data['customer_id'])) {
+                $data['customer_id'] = $parties->customer($data['buyer'])->id;
+            }
+
+            return $service->create($data, $request->user()->id);
+        });
 
         return response()->json($sale->load(['motorcycle', 'customer']), 201);
     }

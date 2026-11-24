@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Supplier extends Model
 {
-    protected $fillable = ['supplier_name', 'supplier_type', 'phone', 'address'];
+    protected $fillable = ['supplier_name', 'supplier_type', 'phone', 'id_number', 'address'];
 
     public function purchases(): HasMany
     {

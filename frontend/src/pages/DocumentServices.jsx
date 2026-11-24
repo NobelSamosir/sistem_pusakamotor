@@ -2,7 +2,7 @@ import { useState } from 'react'
 import api, { errorMessage } from '../lib/api'
 import useFetch from '../lib/useFetch'
 import { rupiah, tanggal, today } from '../lib/format'
-import PartyPicker from '../components/PartyPicker'
+import IdentityFields, { emptyIdentity, identityPayload } from '../components/IdentityFields'
 import { Alert, Button, Card, Input, MoneyInput, PageHeader, Pagination, Select, Table, useFlash } from '../components/ui'
 
 const jenis = [
@@ -17,8 +17,9 @@ const jenis = [
 const namaJenis = Object.fromEntries(jenis.map((j) => [j.value, j.label]))
 
 export default function DocumentServices() {
-  const kosong = { service_date: today(), service_type: 'pajak_tahunan', customer_id: '', license_plate: '', description: '', amount_received: '', amount_paid: '' }
+  const kosong = { service_date: today(), service_type: 'pajak_tahunan', license_plate: '', description: '', amount_received: '', amount_paid: '' }
   const [form, setForm] = useState(kosong)
+  const [cust, setCust] = useState(emptyIdentity)
   const [page, setPage] = useState(1)
   const [error, setError] = useState('')
   const [ok, setOk] = useFlash()
@@ -29,9 +30,10 @@ export default function DocumentServices() {
   const submit = async (e) => {
     e.preventDefault(); setError('')
     try {
-      await api.post('/document-services', { ...form, amount_paid: pinjaman ? 0 : form.amount_paid, customer_id: form.customer_id ? Number(form.customer_id) : null })
+      await api.post('/document-services', { ...form, amount_paid: pinjaman ? 0 : form.amount_paid, customer: cust.name.trim() ? identityPayload(cust) : null })
       setOk(`Tercatat. ${rupiah(upah)} masuk sebagai pendapatan lain-lain.`)
       setForm({ ...kosong, service_date: form.service_date })
+      setCust(emptyIdentity)
       list.reload()
     } catch (err) { setError(errorMessage(err)) }
   }
@@ -47,7 +49,7 @@ export default function DocumentServices() {
           <Select label="Jenis pendapatan" options={jenis} value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} required />
           <Input label="Nomor polisi" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="T 1234 AB (opsional)" />
           <div className="md:col-span-2">
-            <PartyPicker type="customer" label="Pelanggan (opsional)" required={false} value={form.customer_id} onChange={(v) => setForm({ ...form, customer_id: v })} />
+            <IdentityFields kind="customer" title="Pelanggan (opsional)" value={cust} onChange={setCust} required={false} compact />
           </div>
           <Input label="Keterangan" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           {pinjaman ? (

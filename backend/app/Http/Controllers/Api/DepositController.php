@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CustomerDeposit;
 use App\Services\DepositService;
+use App\Services\PartyResolver;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -25,18 +27,23 @@ class DepositController extends Controller
         );
     }
 
-    public function store(Request $request, DepositService $service): JsonResponse
+    public function store(Request $request, DepositService $service, PartyResolver $parties): JsonResponse
     {
         $data = $request->validate([
             'motorcycle_id' => ['nullable', 'exists:motorcycles,id'],
             'unit_description' => ['required_without:motorcycle_id', 'nullable', 'string', 'max:255'],
-            'customer_id' => ['required', 'exists:customers,id'],
             'deposit_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'notes' => ['nullable', 'string'],
-        ]);
+        ] + PartyResolver::rules('buyer.', 'customers'));
 
-        return response()->json($service->create($data, $request->user()->id)->load('motorcycle', 'customer'), 201);
+        $deposit = DB::transaction(function () use ($data, $service, $parties, $request) {
+            $data['customer_id'] = $parties->customer($data['buyer'])->id;
+
+            return $service->create($data, $request->user()->id);
+        });
+
+        return response()->json($deposit->load('motorcycle', 'customer'), 201);
     }
 
     public function refund(Request $request, CustomerDeposit $deposit, DepositService $service): JsonResponse

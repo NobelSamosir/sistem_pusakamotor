@@ -52,6 +52,7 @@ class SupplierController extends Controller
             'supplier_name' => ['required', 'string', 'max:150'],
             'supplier_type' => ['nullable', 'in:perorangan,dealer'],
             'phone' => ['nullable', 'string', 'max:30'],
+            'id_number' => ['nullable', 'digits:16'],
             'address' => ['nullable', 'string'],
         ]);
     }

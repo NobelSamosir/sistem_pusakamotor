@@ -4,7 +4,7 @@ import api, { errorMessage } from '../lib/api'
 import useFetch from '../lib/useFetch'
 import { rupiah, tanggal, today } from '../lib/format'
 import MotorFields, { emptyMotor, motorPayload } from '../components/MotorFields'
-import PartyPicker from '../components/PartyPicker'
+import IdentityFields, { emptyIdentity as emptyParty, identityPayload } from '../components/IdentityFields'
 import { Alert, Button, Card, Input, MoneyInput, PageHeader, Pagination, Select, Table, Textarea } from '../components/ui'
 
 const emptyIdentity = { frame_number: '', engine_number: '', license_plate: '', bpkb_number: '', color: '', condition_notes: '' }
@@ -15,7 +15,7 @@ export default function Purchases() {
   const [motor, setMotor] = useState(fromDss?.motor || emptyMotor)
   const [ident, setIdent] = useState(emptyIdentity)
   const [form, setForm] = useState({
-    supplier_id: '', purchase_date: today(), agreed_price: fromDss?.price || '', deduction: '', deduction_notes: '', payment_method: 'tunai', notes: '',
+    purchase_date: today(), agreed_price: fromDss?.price || '', deduction: '', deduction_notes: '', payment_method: 'tunai', notes: '',
   })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -23,6 +23,7 @@ export default function Purchases() {
   const list = useFetch('/purchases', { page })
 
   const setI = (k) => (e) => setIdent({ ...ident, [k]: e.target.value })
+  const [seller, setSeller] = useState(emptyParty)
   const sepakat = Number(form.agreed_price || 0)
   const potongan = Number(form.deduction || 0)
   const dibayar = sepakat - potongan
@@ -33,7 +34,7 @@ export default function Purchases() {
     try {
       const { data } = await api.post('/purchases', {
         motorcycle: { ...motorPayload(motor), ...ident },
-        supplier_id: Number(form.supplier_id),
+        seller: identityPayload(seller),
         purchase_date: form.purchase_date,
         purchase_price: dibayar,
         agreed_price: sepakat,
@@ -71,7 +72,9 @@ export default function Purchases() {
         <Card title="Transaksi pembelian">
           <Alert>{error}</Alert>
           <div className="grid gap-4 md:grid-cols-2">
-            <PartyPicker type="supplier" label="Penjual (perorangan atau showroom lain)" value={form.supplier_id} onChange={(v) => setForm({ ...form, supplier_id: v })} />
+            <div className="md:col-span-2">
+              <IdentityFields kind="supplier" title="Identitas penjual" value={seller} onChange={setSeller} />
+            </div>
             <Input label="Tanggal beli" type="date" value={form.purchase_date} onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} required />
             <MoneyInput label="Harga kesepakatan" value={form.agreed_price} onChange={(v) => setForm({ ...form, agreed_price: v })} required />
             <MoneyInput label="Potongan biaya (pajak, perbaikan)" value={form.deduction} onChange={(v) => setForm({ ...form, deduction: v })} />

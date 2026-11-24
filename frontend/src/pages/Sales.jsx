@@ -4,7 +4,7 @@ import api, { errorMessage } from '../lib/api'
 import useFetch from '../lib/useFetch'
 import { persen, rupiah, tanggal, today } from '../lib/format'
 import MotorPicker from '../components/MotorPicker'
-import PartyPicker from '../components/PartyPicker'
+import IdentityFields, { emptyIdentity, identityPayload } from '../components/IdentityFields'
 import LeasingInput from '../components/LeasingInput'
 import { Alert, Badge, Button, Card, Checkbox, Input, MoneyInput, PageHeader, Pagination, Select, Table, Tabs, Textarea } from '../components/ui'
 
@@ -16,11 +16,12 @@ export default function Sales() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const [form, setForm] = useState({
-    motorcycle_id: params.get('motor') || '', customer_id: params.get('pelanggan') || '', sale_date: today(),
+    motorcycle_id: params.get('motor') || '', sale_date: today(),
     sale_price: params.get('harga') ? Number(params.get('harga')) : '', sale_type: 'tunai',
     leasing_company: '', down_payment: '', payment_method: 'tunai', notes: '',
   })
-  const [pakaiPesanan, setPakaiPesanan] = useState(true)
+  const [buyer, setBuyer] = useState(emptyIdentity)
+  const [pesananId, setPesananId] = useState(params.get('pesanan') || '')
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
   const list = useFetch('/sales', { page })
@@ -30,15 +31,11 @@ export default function Sales() {
   const kredit = form.sale_type === 'kredit'
   // Uang muka yang sudah terikat ke unit ini
   const depositUnit = (m?.deposits || []).find((d) => d.status === 'aktif')
-  // Uang muka pelanggan yang dibayar sebelum unitnya ada
-  const pesanan = useFetch(!depositUnit && form.customer_id ? '/deposits' : null, { customer_id: form.customer_id, status: 'aktif', unlinked: 1 })
-  const depositPesanan = !depositUnit ? pesanan.data?.data?.[0] : null
-  const deposit = depositUnit || (pakaiPesanan ? depositPesanan : null)
-
-  // Uang muka yang terikat ke unit menentukan pelanggannya
-  useEffect(() => {
-    if (depositUnit) setForm((f) => ({ ...f, customer_id: String(depositUnit.customer_id) }))
-  }, [depositUnit?.id])
+  // Uang muka pesanan: dibayar sebelum unitnya ada di showroom
+  const pesanan = useFetch(!depositUnit ? '/deposits' : null, { status: 'aktif', unlinked: 1, per_page: 100 })
+  const daftarPesanan = depositUnit ? [] : pesanan.data?.data || []
+  const depositPesanan = daftarPesanan.find((d) => String(d.id) === String(pesananId)) || null
+  const deposit = depositUnit || depositPesanan
 
   const hpp = Number(m?.hpp_current || 0)
   const price = Number(form.sale_price || 0)
@@ -55,9 +52,12 @@ export default function Sales() {
       : 'Simpan penjualan? Status motor akan berubah menjadi terjual.'
     if (!window.confirm(pesan)) return
     try {
-      const body = { ...form, motorcycle_id: Number(form.motorcycle_id), customer_id: Number(form.customer_id) }
+      const body = { ...form, motorcycle_id: Number(form.motorcycle_id) }
       if (!kredit) { delete body.leasing_company; delete body.down_payment }
-      if (!depositUnit && pakaiPesanan && depositPesanan) body.deposit_id = depositPesanan.id
+      // Pembeli yang sudah membayar uang muka sudah tercatat; selain itu identitas diisi di form ini
+      if (deposit) body.customer_id = deposit.customer_id
+      else body.buyer = identityPayload(buyer)
+      if (depositPesanan) body.deposit_id = depositPesanan.id
       await api.post('/sales', body)
       navigate(`/motor/${form.motorcycle_id}`)
     } catch (err) { setError(errorMessage(err)) }
@@ -94,17 +94,26 @@ export default function Sales() {
               )}
             </div>
           )}
-          <PartyPicker type="customer" value={form.customer_id} onChange={(v) => setForm({ ...form, customer_id: v })} />
-          <Input label="Tanggal jual" type="date" value={form.sale_date} onChange={(e) => setForm({ ...form, sale_date: e.target.value })} required />
-          {depositPesanan && (
-            <div className="md:col-span-2 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-800">
-              <Checkbox
-                label={`Pakai uang muka pesanan ${depositPesanan.deposit_number} sebesar ${rupiah(depositPesanan.amount)} (${depositPesanan.unit_description}, ${tanggal(depositPesanan.deposit_date)})`}
-                checked={pakaiPesanan}
-                onChange={(e) => setPakaiPesanan(e.target.checked)}
-              />
-            </div>
+          {!depositUnit && daftarPesanan.length > 0 && (
+            <Select
+              label="Uang muka pesanan (jika pembeli sudah memesan unit ini)"
+              placeholder="Tidak memakai uang muka"
+              className="md:col-span-2"
+              options={daftarPesanan.map((d) => ({ value: String(d.id), label: `${d.deposit_number} · ${d.customer?.customer_name} · ${d.unit_description} · ${rupiah(d.amount)}` }))}
+              value={pesananId}
+              onChange={(e) => setPesananId(e.target.value)}
+            />
           )}
+          <div className="md:col-span-2">
+            {deposit ? (
+              <div className="rounded-lg border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                Pembeli: <b>{deposit.customer?.customer_name}</b>{deposit.customer?.phone ? ` · ${deposit.customer.phone}` : ''} (sudah tercatat saat membayar uang muka {deposit.deposit_number})
+              </div>
+            ) : (
+              <IdentityFields kind="customer" title="Identitas pembeli" value={buyer} onChange={setBuyer} />
+            )}
+          </div>
+          <Input label="Tanggal jual" type="date" value={form.sale_date} onChange={(e) => setForm({ ...form, sale_date: e.target.value })} required />
           <MoneyInput label="Harga jual (on the road ke pelanggan)" value={form.sale_price} onChange={(v) => setForm({ ...form, sale_price: v })} required />
           {kredit && (
             <>

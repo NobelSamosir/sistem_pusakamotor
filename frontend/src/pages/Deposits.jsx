@@ -4,12 +4,13 @@ import api, { errorMessage } from '../lib/api'
 import useFetch from '../lib/useFetch'
 import { rupiah, tanggal, today, unitLabel } from '../lib/format'
 import MotorPicker from '../components/MotorPicker'
-import PartyPicker from '../components/PartyPicker'
+import IdentityFields, { emptyIdentity, identityPayload } from '../components/IdentityFields'
 import { Alert, Badge, Button, Card, Input, MoneyInput, PageHeader, Pagination, Select, Table, Tabs, Textarea, useFlash } from '../components/ui'
 
 export default function Deposits() {
-  const [form, setForm] = useState({ motorcycle_id: '', unit_description: '', customer_id: '', deposit_date: today(), amount: '', notes: '' })
+  const [form, setForm] = useState({ motorcycle_id: '', unit_description: '', deposit_date: today(), amount: '', notes: '' })
   const [adaUnit, setAdaUnit] = useState(true)
+  const [buyer, setBuyer] = useState(emptyIdentity)
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
   const [error, setError] = useState('')
@@ -23,12 +24,13 @@ export default function Deposits() {
         ...form,
         motorcycle_id: adaUnit ? Number(form.motorcycle_id) : null,
         unit_description: adaUnit ? null : form.unit_description,
-        customer_id: Number(form.customer_id),
+        buyer: identityPayload(buyer),
       })
       setOk(adaUnit
         ? 'Uang muka tercatat. Motor berstatus dipesan dan tidak bisa dipesan pelanggan lain.'
         : 'Uang muka pesanan tercatat. Setelah unitnya dibeli, pilih uang muka ini di halaman Penjualan.')
       setForm({ ...form, motorcycle_id: '', unit_description: '', amount: '', notes: '' })
+      setBuyer(emptyIdentity)
       list.reload()
     } catch (err) { setError(errorMessage(err)) }
   }
@@ -67,7 +69,7 @@ export default function Deposits() {
               ? <MotorPicker value={form.motorcycle_id} exclude={['dipesan']} onChange={(v) => setForm({ ...form, motorcycle_id: v })} />
               : <Input label="Unit yang dipesan" value={form.unit_description} onChange={(e) => setForm({ ...form, unit_description: e.target.value })} placeholder="Honda PCX 2021 warna hitam" required />}
           </div>
-          <PartyPicker type="customer" value={form.customer_id} onChange={(v) => setForm({ ...form, customer_id: v })} />
+          <div className="md:col-span-2"><IdentityFields kind="customer" title="Identitas pembeli" value={buyer} onChange={setBuyer} /></div>
           <Input label="Tanggal" type="date" value={form.deposit_date} onChange={(e) => setForm({ ...form, deposit_date: e.target.value })} required />
           <MoneyInput label="Nominal uang muka" value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} required />
           <Textarea label="Keterangan" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -92,7 +94,7 @@ export default function Deposits() {
             {
               key: 'aksi', label: '', render: (r) => r.status === 'aktif' && (
                 <span className="flex gap-1">
-                  <Link to={r.motorcycle_id ? `/penjualan?motor=${r.motorcycle_id}` : `/penjualan?pelanggan=${r.customer_id}`}><Button variant="ghost" className="px-2 py-1">Jual</Button></Link>
+                  <Link to={r.motorcycle_id ? `/penjualan?motor=${r.motorcycle_id}` : `/penjualan?pesanan=${r.id}`}><Button variant="ghost" className="px-2 py-1">Jual</Button></Link>
                   <Button variant="ghost" className="px-2 py-1" onClick={() => close(r, 'refund')}>Kembalikan</Button>
                   <Button variant="ghost" className="px-2 py-1 text-rose-600" onClick={() => close(r, 'forfeit')}>Hangus</Button>
                 </span>

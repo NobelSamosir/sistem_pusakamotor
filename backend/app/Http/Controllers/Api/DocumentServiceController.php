@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DocumentService;
 use App\Services\DocumentServiceService;
+use App\Services\PartyResolver;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -24,18 +26,24 @@ class DocumentServiceController extends Controller
         );
     }
 
-    public function store(Request $request, DocumentServiceService $service): JsonResponse
+    public function store(Request $request, DocumentServiceService $service, PartyResolver $parties): JsonResponse
     {
         $data = $request->validate([
             'service_date' => ['required', 'date'],
             'service_type' => ['required', Rule::in(DocumentService::TYPES)],
-            'customer_id' => ['nullable', 'exists:customers,id'],
             'license_plate' => ['nullable', 'string', 'max:20'],
             'description' => ['nullable', 'string', 'max:255'],
             'amount_received' => ['required', 'numeric', 'gt:0'],
             'amount_paid' => ['required', 'numeric', 'min:0'],
-        ]);
+        ] + PartyResolver::rules('customer.', 'customers', false));
 
-        return response()->json($service->create($data, $request->user()->id), 201);
+        return response()->json(DB::transaction(function () use ($data, $service, $parties, $request) {
+            // Nama pelanggan opsional; bila diisi, dicatat sebagai pelanggan
+            if (! empty($data['customer']['name'])) {
+                $data['customer_id'] = $parties->customer($data['customer'])->id;
+            }
+
+            return $service->create($data, $request->user()->id);
+        }), 201);
     }
 }

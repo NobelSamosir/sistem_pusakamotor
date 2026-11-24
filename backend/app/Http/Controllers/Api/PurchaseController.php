@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Motorcycle;
 use App\Models\Purchase;
 use App\Services\PurchaseService;
+use App\Services\PartyResolver;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -27,11 +29,11 @@ class PurchaseController extends Controller
      * Body JSON:
      * {
      *   "motorcycle": { frame_number, engine_number, brand, model, year, ... },
-     *   "supplier_id": 1, "purchase_date": "2026-11-02", "purchase_price": 15000000,
+     *   "seller": { name, phone?, address?, id_number? (NIK), type?, id? }, "purchase_date": "2026-11-02", "purchase_price": 15000000,
      *   "payment_method": "tunai", "notes": null, "recommendation_id": null
      * }
      */
-    public function store(Request $request, PurchaseService $service): JsonResponse
+    public function store(Request $request, PurchaseService $service, PartyResolver $parties): JsonResponse
     {
         $request->merge(['motorcycle' => array_merge($request->input('motorcycle', []), [
             'frame_number' => Motorcycle::normalizeNumber($request->input('motorcycle.frame_number')),
@@ -40,7 +42,6 @@ class PurchaseController extends Controller
 
         $data = $request->validate(MotorcycleRules::rules(null, 'motorcycle.') + [
             'motorcycle' => ['required', 'array'],
-            'supplier_id' => ['required', 'exists:suppliers,id'],
             'purchase_date' => ['required', 'date'],
             'purchase_price' => ['required', 'numeric', 'gt:0'],
             'agreed_price' => ['nullable', 'numeric', 'gte:purchase_price'],
@@ -48,12 +49,14 @@ class PurchaseController extends Controller
             'payment_method' => ['nullable', 'in:tunai,transfer'],
             'notes' => ['nullable', 'string'],
             'recommendation_id' => ['nullable', 'exists:price_recommendations,id'],
-        ]);
+        ] + PartyResolver::rules('seller.', 'suppliers'));
 
-        $purchase = $service->create(
+        // Identitas penjual diisi di form ini; dicatat dalam satu transaksi dengan pembeliannya
+        $purchase = DB::transaction(fn () => $service->create(
+
             $data['motorcycle'],
             [
-                'supplier_id' => $data['supplier_id'],
+                'supplier_id' => $parties->supplier($data['seller'])->id,
                 'purchase_date' => $data['purchase_date'],
                 'purchase_price' => $data['purchase_price'],
                 'agreed_price' => $data['agreed_price'] ?? null,
@@ -63,7 +66,7 @@ class PurchaseController extends Controller
             ],
             $request->user()->id,
             $data['recommendation_id'] ?? null,
-        );
+        ));
 
         return response()->json($purchase->load('supplier'), 201);
     }
