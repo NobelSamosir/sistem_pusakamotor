@@ -15,7 +15,7 @@ export default function Purchases() {
   const [motor, setMotor] = useState(fromDss?.motor || emptyMotor)
   const [ident, setIdent] = useState(emptyIdentity)
   const [form, setForm] = useState({
-    purchase_date: today(), agreed_price: fromDss?.price || '', deduction: '', deduction_notes: '', payment_method: 'tunai', notes: '',
+    purchase_date: today(), agreed_price: fromDss?.price || '', deduction: fromDss?.deduction || '', deduction_notes: fromDss?.deduction ? 'Servis/pajak sesuai DSS' : '', payment_method: 'tunai', notes: '',
   })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)

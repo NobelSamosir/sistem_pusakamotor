@@ -65,7 +65,10 @@ class DssController extends Controller
     {
         $data = $request->validate($this->motorRules() + [
             'target_markup' => ['required', 'numeric', 'between:0,1'],
+            // Perkiraan biaya servis/pajak yang dibayar showroom (bisa berubah)
             'estimated_service_cost' => ['required', 'numeric', 'min:0'],
+            // Potongan yang disepakati dari uang penjual (boleh 0)
+            'seller_deduction' => ['nullable', 'numeric', 'min:0', 'lt:offer_price'],
             'offer_price' => ['required', 'numeric', 'gt:0'],
         ]);
 
@@ -75,6 +78,7 @@ class DssController extends Controller
             (string) $data['estimated_service_cost'],
             (string) $data['offer_price'],
             $request->user()->id,
+            (string) ($data['seller_deduction'] ?? 0),
         );
 
         return response()->json($rec, 201);

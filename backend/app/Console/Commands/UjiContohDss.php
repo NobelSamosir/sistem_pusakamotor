@@ -58,13 +58,15 @@ class UjiContohDss extends Command
             ['Peringatan', implode(', ', array_column($p->warnings ?? [], 'kode')) ?: 'tidak ada', 'tidak ada'],
         ]);
 
-        $this->line('DSS pembelian (PL 10%, estimasi servis Rp500.000):');
+        $this->line('DSS pembelian (PL 10%, estimasi servis Rp500.000, tanpa potongan dari penjual):');
         $rows = [];
         foreach (['15000000', '16000000', '17000000'] as $offer) {
             $r = DssRules::purchase($p->lower_bound, '0.10', '500000', $offer);
-            $rows[] = [$rp($offer), $rp($r['max_purchase_price']), $r['decision_status'], $rp($r['recommended_price'])];
+            $rows[] = [$rp($offer), $rp($r['max_purchase_price']), $r['decision_status'], $rp($r['recommended_price']), $rp($r['paid_to_seller'])];
         }
-        $this->table(['Harga tawaran', 'HB maks', 'Status', 'Rekomendasi'], $rows);
+        $this->table(['Harga kesepakatan', 'Kesepakatan maks', 'Status', 'Rekomendasi', 'Dibayar ke penjual'], $rows);
+        $r = DssRules::purchase($p->lower_bound, '0.10', '500000', '15500000', '500000');
+        $this->line('Bila Rp500.000 dipotong dari uang penjual, kesepakatan Rp15.500.000: '.$r['decision_status'].', penjual menerima '.$rp($r['paid_to_seller']).'.');
 
         $this->line('DSS penjualan (HPP Rp15.600.000):');
         $rows = [];

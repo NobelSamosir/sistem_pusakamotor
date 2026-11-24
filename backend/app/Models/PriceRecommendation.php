@@ -9,7 +9,7 @@ class PriceRecommendation extends Model
 {
     protected $fillable = [
         'recommendation_type', 'motorcycle_id', 'price_prediction_id', 'user_id', 'target_markup',
-        'hpp', 'target_price', 'offer_price', 'estimated_service_cost', 'max_purchase_price',
+        'hpp', 'target_price', 'offer_price', 'estimated_service_cost', 'seller_deduction', 'max_purchase_price',
         'decision_status', 'recommended_price', 'expected_profit', 'expected_margin', 'notes',
     ];
 
@@ -20,7 +20,7 @@ class PriceRecommendation extends Model
             'hpp' => 'decimal:2',
             'target_price' => 'decimal:2',
             'offer_price' => 'decimal:2',
-            'estimated_service_cost' => 'decimal:2',
+            'estimated_service_cost' => 'decimal:2', 'seller_deduction' => 'decimal:2',
             'max_purchase_price' => 'decimal:2',
             'recommended_price' => 'decimal:2',
             'expected_profit' => 'decimal:2',

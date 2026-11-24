@@ -26,11 +26,11 @@ class DssService
      *
      * @param array $motor  karakteristik motor (lihat FeatureBuilder::fromInput)
      */
-    public function purchase(array $motor, string $markup, string $serviceCost, string $offer, ?int $userId = null): PriceRecommendation
+    public function purchase(array $motor, string $markup, string $serviceCost, string $offer, ?int $userId = null, string $deduction = '0'): PriceRecommendation
     {
-        return DB::transaction(function () use ($motor, $markup, $serviceCost, $offer, $userId) {
+        return DB::transaction(function () use ($motor, $markup, $serviceCost, $offer, $userId, $deduction) {
             $prediction = $this->predictions->predict($this->features->fromInput($motor), null, $userId);
-            $r = DssRules::purchase($prediction->lower_bound, $markup, $serviceCost, $offer);
+            $r = DssRules::purchase($prediction->lower_bound, $markup, $serviceCost, $offer, $deduction);
 
             return PriceRecommendation::create([
                 'recommendation_type' => 'beli',
@@ -40,13 +40,14 @@ class DssService
                 'target_markup' => $markup,
                 'offer_price' => Money::str(Money::of($offer)),
                 'estimated_service_cost' => Money::str(Money::of($serviceCost)),
+                'seller_deduction' => Money::str(Money::of($deduction)),
                 'max_purchase_price' => $r['max_purchase_price'],
                 'decision_status' => $r['decision_status'],
                 'recommended_price' => $r['recommended_price'],
                 'expected_profit' => $r['expected_profit'],
                 'expected_margin' => $r['expected_margin'],
                 'notes' => $this->notes($prediction->warnings),
-            ])->load('prediction');
+            ])->load('prediction')->setAttribute('rules', $r);
         });
     }
 

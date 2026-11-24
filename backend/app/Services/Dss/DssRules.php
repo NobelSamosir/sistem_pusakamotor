@@ -21,45 +21,62 @@ final class DssRules
     public const DI_ATAS_PASAR = 'Di atas pasar';
 
     /**
-     * DSS pembelian. HB_maks = L / (1 + PL) - B_estimasi
-     *  - tawaran <= HB_maks                  -> Layak dibeli
-     *  - HB_maks < tawaran <= L - B_estimasi  -> Margin tipis (tawar sampai HB_maks)
-     *  - tawaran > L - B_estimasi             -> Tidak disarankan
+     * DSS pembelian, sesuai cara showroom membeli (hasil wawancara pemilik).
+     *
+     * Biaya servis/pajak hanya bisa diperkirakan saat menawar, jadi dipisahkan dari potongan:
+     *   - estimasi biaya (B)  : perkiraan servis/pajak yang nanti dibayar showroom
+     *   - potongan (D)        : bagian harga kesepakatan yang dipotong dari uang penjual (boleh 0)
+     *
+     *   Dibayar ke penjual    = kesepakatan - D
+     *   Modal perkiraan (HPP) = dibayar ke penjual + B
+     *   Dibayar maksimal      = L / (1 + PL) - B        (laba PL tercapai walau laku di L)
+     *   Kesepakatan maksimal  = dibayar maksimal + D
+     *
+     *  - dibayar <= dibayar maksimal      -> Layak dibeli
+     *  - dibayar <= L - B (tidak rugi)    -> Margin tipis (tawar turun ke kesepakatan maksimal)
+     *  - lainnya                          -> Tidak disarankan
+     * Bila D = B, modal = harga kesepakatan; bila D = 0, modal = kesepakatan + B.
      */
-    public static function purchase(string $lower, string $markup, string $serviceCost, string $offer): array
+    public static function purchase(string $lower, string $markup, string $serviceCost, string $offer, string $deduction = '0'): array
     {
         $L = Money::of($lower);
-        $pl = BigDecimal::of($markup);
+        $pl = BigDecimal::one()->plus(BigDecimal::of($markup));
         $b = Money::of($serviceCost);
-        $offerPrice = Money::of($offer);
+        $d = Money::of($deduction);
+        $agreed = Money::of($offer);
+        $paid = $agreed->minus($d);
 
-        $hbMax = $L->dividedBy(BigDecimal::one()->plus($pl), 2, RoundingMode::DOWN)->minus($b);
-        $lossLimit = $L->minus($b);
+        $targetModal = $L->dividedBy($pl, 2, RoundingMode::DOWN);   // modal maksimal agar laba PL
+        $maxPaid = $targetModal->minus($b);
+        $maxAgreed = $maxPaid->plus($d);
+        $lossPaid = $L->minus($b);                                  // di atas ini rugi bila laku di L
 
-        if (! $hbMax->isPositive()) {
-            $status = self::TIDAK_DISARANKAN;
-            $recommended = null;
-        } elseif ($offerPrice->isLessThanOrEqualTo($hbMax)) {
-            $status = self::LAYAK;
-            $recommended = $offerPrice;
-        } elseif ($offerPrice->isLessThanOrEqualTo($lossLimit)) {
-            $status = self::MARGIN_TIPIS;
-            $recommended = $hbMax;
+        if (! $maxPaid->isPositive()) {
+            [$status, $recommended] = [self::TIDAK_DISARANKAN, null];
+        } elseif ($paid->isLessThanOrEqualTo($maxPaid)) {
+            [$status, $recommended] = [self::LAYAK, $agreed];
+        } elseif ($paid->isLessThanOrEqualTo($lossPaid)) {
+            [$status, $recommended] = [self::MARGIN_TIPIS, $maxAgreed];
         } else {
-            $status = self::TIDAK_DISARANKAN;
-            $recommended = null;
+            [$status, $recommended] = [self::TIDAK_DISARANKAN, null];
         }
 
-        // Perkiraan laba bila dibeli di harga rekomendasi dan laku di harga pasar terendah (L)
-        $profit = $recommended ? $L->minus($recommended)->minus($b) : null;
+        $recPaid = $recommended?->minus($d);
+        $modal = $recPaid?->plus($b);
+        $profit = $modal ? $L->minus($modal) : null;
 
         return [
-            'max_purchase_price' => Money::str($hbMax),
-            'loss_limit' => Money::str($lossLimit),
+            'max_purchase_price' => Money::str($maxAgreed),
+            'max_paid_to_seller' => Money::str($maxPaid),
+            'loss_limit' => Money::str($lossPaid->plus($d)),
             'decision_status' => $status,
             'recommended_price' => $recommended ? Money::str($recommended) : null,
+            'paid_to_seller' => $recPaid ? Money::str($recPaid) : null,
+            // Ketidakpastian servis: batas biaya servis untuk harga yang dibayar ke penjual
+            'service_cap_target' => Money::str($targetModal->minus($paid)),
+            'service_cap_breakeven' => Money::str($L->minus($paid)),
             'expected_profit' => $profit ? Money::str($profit) : null,
-            'expected_margin' => $profit ? (string) $profit->dividedBy($L, 4, RoundingMode::HALF_UP) : null,
+            'expected_margin' => $profit ? (string) $profit->dividedBy($modal, 4, RoundingMode::HALF_UP) : null,
         ];
     }
 
