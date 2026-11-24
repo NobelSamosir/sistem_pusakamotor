@@ -94,7 +94,7 @@ function HasilBeli({ rec, onRecord }) {
           <div>
             <p className="text-sm text-slate-600">Harga kesepakatan maksimal</p>
             <p className="text-3xl font-bold text-slate-900">{maxPaid > 0 ? rupiah(maxAgreed) : '-'}</p>
-            <p className="text-xs text-slate-600">{cut > 0 ? `bila ${rupiah(cut)} dipotong dari uang penjual` : 'tanpa potongan dari uang penjual'}</p>
+            <p className="text-xs text-slate-600">sudah termasuk potongan servis/pajak {rupiah(cut)}</p>
           </div>
         </div>
         <p className="mt-3 text-sm text-slate-700">
@@ -117,9 +117,9 @@ function HasilBeli({ rec, onRecord }) {
           <table className="w-full text-sm">
             <tbody className="divide-y divide-slate-100">
               <tr><td className="py-2 text-slate-600">Harga kesepakatan dengan penjual</td><td className="py-2 text-right">{rupiah(offer)}</td></tr>
-              <tr><td className="py-2 text-slate-600">- Potongan dari uang penjual</td><td className="py-2 text-right">{rupiah(cut)}</td></tr>
+              <tr><td className="py-2 text-slate-600">- Dipotong untuk servis/pajak</td><td className="py-2 text-right">{rupiah(cut)}</td></tr>
               <tr><td className="py-2 font-semibold">= Uang yang diterima penjual</td><td className="py-2 text-right font-semibold">{rupiah(paid)}</td></tr>
-              <tr><td className="py-2 text-slate-600">+ Perkiraan servis/pajak (dibayar showroom)</td><td className="py-2 text-right">{rupiah(servis)}</td></tr>
+              <tr><td className="py-2 text-slate-600">+ Servis/pajak dibayar showroom</td><td className="py-2 text-right">{rupiah(servis)}</td></tr>
               <tr className="font-semibold"><td className="py-2">= Perkiraan modal motor (HPP)</td><td className="py-2 text-right">{rupiah(modal)}</td></tr>
               <tr className="font-semibold text-teal-900"><td className="py-2">Harga jual agar laba {plTeks} (modal x {(1 + pl).toLocaleString('id-ID')})</td><td className="py-2 text-right">{rupiah(target)}</td></tr>
             </tbody>
@@ -173,7 +173,6 @@ function Beli() {
   const [motor, setMotor] = useState(emptyMotor)
   const [pl, setPl] = useState('')
   const [service, setService] = useState('')
-  const [cut, setCut] = useState('')
   const [offer, setOffer] = useState('')
   const [rec, setRec] = useState(null)
   const [error, setError] = useState('')
@@ -184,7 +183,7 @@ function Beli() {
     e.preventDefault(); setBusy(true); setError('')
     try {
       const { data } = await api.post('/dss/purchase', {
-        ...motorPayload(motor), target_markup: plValue / 100, estimated_service_cost: service || 0, seller_deduction: cut || 0, offer_price: offer,
+        ...motorPayload(motor), target_markup: plValue / 100, estimated_service_cost: service || 0, seller_deduction: service || 0, offer_price: offer, // servis/pajak dipotong dari uang penjual
       })
       setRec(data)
     } catch (err) { setError(errorMessage(err)) } finally { setBusy(false) }
@@ -196,16 +195,10 @@ function Beli() {
         <Alert>{error}</Alert>
         <form onSubmit={submit}>
           <MotorFields value={motor} onChange={setMotor} />
-          <div className="mt-5 grid gap-4 border-t border-slate-100 pt-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid gap-4 border-t border-slate-100 pt-5 md:grid-cols-3">
             <Input label="Persentase laba diharapkan / PL (%)" type="number" min="0" max="100" step="0.5" placeholder={String(defaultMarkup * 100)} value={pl} onChange={(e) => setPl(e.target.value)} hint="Persen laba terhadap modal (HPP)" />
-            <MoneyInput label="Perkiraan biaya servis/pajak" value={service} onChange={setService} hint="Perkiraan showroom, biaya sebenarnya bisa berbeda" />
-            <MoneyInput label="Harga kesepakatan / tawaran penjual" value={offer} onChange={setOffer} required />
-            <div>
-              <MoneyInput label="Potongan dari uang penjual" value={cut} onChange={setCut} hint="Kosongkan bila penjual minta harga bersih" />
-              {service && String(service) !== String(cut) && (
-                <button type="button" className="mt-1 text-xs font-medium text-teal-700 hover:underline" onClick={() => setCut(service)}>Samakan dengan perkiraan servis</button>
-              )}
-            </div>
+            <MoneyInput label="Perkiraan biaya servis/pajak" value={service} onChange={setService} hint="Dipotong dari uang yang diterima penjual" />
+            <MoneyInput label="Harga kesepakatan / tawaran penjual" value={offer} onChange={setOffer} required hint="Sebelum dipotong servis/pajak" />
           </div>
           <div className="mt-5 flex justify-end"><Button disabled={busy}>{busy ? 'Menghitung...' : 'Hitung rekomendasi beli'}</Button></div>
         </form>

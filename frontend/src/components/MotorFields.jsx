@@ -11,12 +11,20 @@ export const emptyMotor = {
  * Pilihan diambil dari data latih supaya ejaannya sama persis.
  */
 export default function MotorFields({ value, onChange }) {
-  const { categories: c, error } = useOptions()
+  const { categories: c, error, loading, reload } = useOptions()
   const set = (k) => (e) => onChange({ ...value, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
 
   return (
     <div>
-      {error && <p className="mb-3 text-sm text-amber-700">{error}</p>}
+      {error && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>{error}</span>
+          <button type="button" onClick={reload} disabled={loading} className="rounded-md bg-amber-600 px-3 py-1.5 font-medium text-white hover:bg-amber-700 disabled:opacity-60">
+            {loading ? 'Memuat...' : 'Coba lagi'}
+          </button>
+        </div>
+      )}
+      {!error && loading && <p className="mb-3 text-sm text-slate-500">Memuat daftar pilihan...</p>}
       <div className="grid gap-4 md:grid-cols-3">
         <Field label="Merek">
           <input list="dl-brand" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={value.brand} onChange={set('brand')} placeholder="Honda" required />
