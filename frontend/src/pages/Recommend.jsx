@@ -70,102 +70,77 @@ function HasilBeli({ rec, onRecord }) {
   const modal = paid + servis
   const target = modal * (1 + pl)
   const capTarget = Number(r.service_cap_target ?? L / (1 + pl) - paid)
-  const capRugi = Number(r.service_cap_breakeven ?? L - paid)
   const plTeks = persen(pl, 0)
-  const t = tones[rec.decision_status] || tones['Tidak disarankan']
-  const posisiTarget = target < L ? 'di bawah harga pasar terendah, jadi mudah laku'
-    : target <= U ? 'masih di dalam range harga pasar'
-      : 'di atas harga pasar tertinggi, jadi sulit laku'
-  const skenario = [['Laku di harga pasar terendah (L)', L], ['Laku di harga prediksi', P], ['Laku di harga pasar tertinggi (U)', U]]
-  const labaL = L - modal
+  const status = rec.decision_status
+  const t = tones[status] || tones['Tidak disarankan']
+  const juta = (v) => `Rp${(v / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })} jt`
+
+  const judul = { 'Layak dibeli': 'Layak dibeli', 'Margin tipis': 'Boleh, tapi tawar lagi', 'Tidak disarankan': 'Jangan dibeli di harga ini' }[status] || status
+  const kalimat = status === 'Layak dibeli'
+    ? `Harga ${rupiah(offer)} aman. Batas paling tinggi ${rupiah(maxAgreed)}.`
+    : status === 'Margin tipis'
+      ? `Masih untung, tapi di bawah ${plTeks}. Tawar turun ke ${rupiah(maxAgreed)}.`
+      : maxPaid > 0
+        ? `Terlalu mahal, berisiko rugi. Tawar turun ke ${rupiah(maxAgreed)} atau lewati.`
+        : 'Biaya servis terlalu besar dibanding harga pasar motor ini.'
+
+  const Angka = ({ label, value, note }) => (
+    <div className="rounded-lg bg-white/70 p-4">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-bold text-slate-900">{value}</p>
+      {note && <p className="text-xs text-slate-500">{note}</p>}
+    </div>
+  )
 
   return (
-    <Card title="Hasil DSS pembelian" className="mt-6" actions={<Badge>{rec.decision_status}</Badge>}>
+    <Card title="Hasil DSS pembelian" className="mt-6">
       <Warnings warnings={p.warnings} />
-      <PredictionSummary p={p} />
 
-      <div className={`mt-5 rounded-xl border p-5 ${t.box}`}>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <p className="text-sm text-slate-600">Uang ke penjual paling banyak</p>
-            <p className="text-3xl font-bold text-slate-900">{maxPaid > 0 ? rupiah(maxPaid) : '-'}</p>
-            <p className="text-xs text-slate-600">dengan perkiraan servis/pajak {rupiah(servis)}</p>
-          </div>
-          <div>
-            <p className="text-sm text-slate-600">Harga kesepakatan maksimal</p>
-            <p className="text-3xl font-bold text-slate-900">{maxPaid > 0 ? rupiah(maxAgreed) : '-'}</p>
-            <p className="text-xs text-slate-600">sudah termasuk potongan servis/pajak {rupiah(cut)}</p>
-          </div>
+      <div className={`rounded-xl border p-5 ${t.box}`}>
+        <p className={`text-2xl font-bold ${t.text}`}>{judul}</p>
+        <p className="mt-1 text-slate-700">{kalimat}</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <Angka label="Bayar ke penjual" value={rupiah(paid)} note={`${rupiah(offer)} dipotong servis ${rupiah(cut)}`} />
+          <Angka label="Modal motor" value={rupiah(modal)} note="uang ke penjual + servis" />
+          <Angka label={`Jual minimal (untung ${plTeks})`} value={rupiah(target)} note={`harga pasar ${juta(L)} sampai ${juta(U)}`} />
         </div>
-        <p className="mt-3 text-sm text-slate-700">
-          Batas ini membuat laba tetap minimal {plTeks} walaupun motor hanya laku di harga pasar terendah ({rupiah(L)}).
-        </p>
-        <p className={`mt-3 font-semibold ${t.text}`}>
-          {rec.decision_status === 'Layak dibeli' && `Kesepakatan ${rupiah(offer)} masih ${rupiah(maxAgreed - offer)} di bawah batas. Layak dibeli; penjual menerima ${rupiah(paid)}.`}
-          {rec.decision_status === 'Margin tipis' && `Kesepakatan ${rupiah(offer)} melebihi batas ${rupiah(offer - maxAgreed)}. Masih untung, tetapi laba di bawah ${plTeks}. Tawar turun ke ${rupiah(maxAgreed)} (penjual menerima ${rupiah(maxPaid)}).`}
-          {rec.decision_status === 'Tidak disarankan' && (maxPaid > 0
-            ? `Kesepakatan ${rupiah(offer)} terlalu tinggi. Bila motor hanya laku di harga pasar terendah, showroom rugi ${rupiah(-labaL)}. Tawar turun ke ${rupiah(maxAgreed)} atau lewati motor ini.`
-            : 'Perkiraan biaya servis/pajak terlalu besar dibanding harga pasar motor ini, jadi tidak ada harga beli yang aman.')}
-        </p>
+        {status !== 'Tidak disarankan' && capTarget > 0 && (
+          <p className="mt-3 text-sm text-slate-600">Tetap untung {plTeks} selama biaya servis tidak lebih dari {rupiah(capTarget)}.</p>
+        )}
       </div>
 
-      <ZonaBeli maxAgreed={maxAgreed} lossLimit={lossAgreed} offer={offer} />
-
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <div>
-          <p className="mb-2 text-sm font-medium text-slate-700">Hitungan bila dibeli di harga kesepakatan</p>
-          <table className="w-full text-sm">
+      <details className="mt-4 rounded-lg border border-slate-200 p-4 text-sm">
+        <summary className="cursor-pointer font-medium text-slate-700">Lihat rincian hitungan</summary>
+        <div className="mt-4 space-y-5">
+          <div className="grid gap-3 md:grid-cols-3">
+            <Info label="Harga pasar terendah (L)" value={rupiah(L)} />
+            <Info label="Prediksi harga pasar" value={rupiah(P)} />
+            <Info label="Harga pasar tertinggi (U)" value={rupiah(U)} />
+          </div>
+          <ZonaBeli maxAgreed={maxAgreed} lossLimit={lossAgreed} offer={offer} />
+          <table className="w-full">
             <tbody className="divide-y divide-slate-100">
-              <tr><td className="py-2 text-slate-600">Harga kesepakatan dengan penjual</td><td className="py-2 text-right">{rupiah(offer)}</td></tr>
-              <tr><td className="py-2 text-slate-600">- Dipotong untuk servis/pajak</td><td className="py-2 text-right">{rupiah(cut)}</td></tr>
-              <tr><td className="py-2 font-semibold">= Uang yang diterima penjual</td><td className="py-2 text-right font-semibold">{rupiah(paid)}</td></tr>
-              <tr><td className="py-2 text-slate-600">+ Servis/pajak dibayar showroom</td><td className="py-2 text-right">{rupiah(servis)}</td></tr>
-              <tr className="font-semibold"><td className="py-2">= Perkiraan modal motor (HPP)</td><td className="py-2 text-right">{rupiah(modal)}</td></tr>
-              <tr className="font-semibold text-teal-900"><td className="py-2">Harga jual agar laba {plTeks} (modal x {(1 + pl).toLocaleString('id-ID')})</td><td className="py-2 text-right">{rupiah(target)}</td></tr>
+              <tr><td className="py-2 text-slate-600">Harga kesepakatan maksimal = L ÷ {(1 + pl).toLocaleString('id-ID')}</td><td className="py-2 text-right font-semibold">{rupiah(maxAgreed)}</td></tr>
+              <tr><td className="py-2 text-slate-600">Bayar ke penjual paling banyak = maksimal − servis</td><td className="py-2 text-right font-semibold">{rupiah(maxPaid)}</td></tr>
+              {skenarioLaba(L, P, U, modal).map(([nama, laba]) => (
+                <tr key={nama}><td className="py-2 text-slate-600">Laba bila laku di {nama}</td><td className={`py-2 text-right font-semibold ${laba < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{rupiah(laba)} ({persen(laba / modal)})</td></tr>
+              ))}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-slate-600">Harga jual {rupiah(target)} itu {posisiTarget} ({rupiah(L)} sampai {rupiah(U)}).</p>
+          <p className="text-xs text-slate-500">Biaya servis sebenarnya dicatat di menu Biaya Kendaraan, dan modal motor mengikuti biaya sebenarnya.</p>
         </div>
-        <div>
-          <p className="mb-2 text-sm font-medium text-slate-700">Perkiraan laba bila disepakati {rupiah(offer)}</p>
-          <table className="w-full text-sm">
-            <thead><tr className="text-xs text-slate-500"><th className="py-1 text-left font-medium">Bila motor</th><th className="py-1 text-right font-medium">Harga jual</th><th className="py-1 text-right font-medium">Laba</th><th className="py-1 text-right font-medium">% dari modal</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">
-              {skenario.map(([nama, harga]) => {
-                const laba = harga - modal
-                return (
-                  <tr key={nama}>
-                    <td className="py-2 text-slate-600">{nama}</td>
-                    <td className="py-2 text-right">{rupiah(harga)}</td>
-                    <td className={`py-2 text-right font-semibold ${laba < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{rupiah(laba)}</td>
-                    <td className={`py-2 text-right ${laba / modal < pl ? 'text-amber-700' : 'text-slate-700'}`}>{persen(laba / modal)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          <p className="mt-2 text-xs text-slate-600">Persen dihitung terhadap modal, sama seperti PL {plTeks}.</p>
-        </div>
-      </div>
-
-      <div className="mt-6 rounded-lg border border-sky-100 bg-sky-50 p-4 text-sm text-sky-900">
-        <p className="font-semibold">Kalau biaya servis/pajak ternyata berbeda dari perkiraan</p>
-        <p className="mt-1">
-          Dengan membayar penjual {rupiah(paid)}, laba tetap minimal {plTeks} selama total servis/pajak <b>tidak lebih dari {rupiah(Math.max(capTarget, 0))}</b>,
-          dan showroom tidak rugi selama <b>tidak lebih dari {rupiah(Math.max(capRugi, 0))}</b> (bila motor laku di harga pasar terendah).
-        </p>
-        <p className="mt-1 text-xs text-sky-800">Biaya sebenarnya dicatat di menu Biaya Kendaraan saat dibayar, dan HPP motor mengikuti biaya sebenarnya.</p>
-      </div>
+      </details>
 
       {rec.recommended_price && (
-        <div className="mt-6 flex items-center justify-end gap-3">
-          <span className="text-sm text-slate-600">Rekomendasi: sepakat <b>{rupiah(rec.recommended_price)}</b>, bayar penjual <b>{rupiah(Number(rec.recommended_price) - cut)}</b></span>
-          <Button onClick={onRecord}>Catat pembelian dengan harga ini</Button>
+        <div className="mt-5 flex justify-end">
+          <Button onClick={onRecord}>Catat pembelian {rupiah(rec.recommended_price)}</Button>
         </div>
       )}
     </Card>
   )
 }
+
+const skenarioLaba = (L, P, U, modal) => [['harga terendah', L - modal], ['harga prediksi', P - modal], ['harga tertinggi', U - modal]]
 
 function Beli() {
   const navigate = useNavigate()

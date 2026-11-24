@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\DB;
  */
 class VehicleCostService
 {
+    private const LABEL = ['cat_body' => 'cat dan body', 'administrasi' => 'administrasi/pajak'];
+
     public function __construct(private JournalService $journal, private SupplyService $supplies) {}
 
     /** @param array $data motorcycle_id, cost_date, cost_category, description?, amount, hpp_included, source? (kas|perlengkapan) */
@@ -49,7 +51,7 @@ class VehicleCostService
 
             $this->journal->post(
                 $data['cost_date'],
-                "Biaya {$cost->cost_category} {$motorcycle->brand} {$motorcycle->model} ({$motorcycle->frame_number})"
+                "Biaya ".(self::LABEL[$cost->cost_category] ?? str_replace('_', ' ', $cost->cost_category))." {$motorcycle->brand} {$motorcycle->model} ({$motorcycle->frame_number})"
                     .($source === 'perlengkapan' ? ' dari perlengkapan' : ''),
                 JournalEntry::REF_VEHICLE_COST,
                 $cost->id,
