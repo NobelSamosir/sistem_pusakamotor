@@ -8,6 +8,7 @@ use App\Models\Purchase;
 use App\Services\PurchaseService;
 use App\Services\PartyResolver;
 use Illuminate\Support\Facades\DB;
+use App\Models\Supplier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -17,7 +18,7 @@ class PurchaseController extends Controller
     public function index(Request $request): JsonResponse
     {
         return response()->json(
-            Purchase::with(['motorcycle:id,vehicle_code,frame_number,brand,model,year,status', 'supplier:id,supplier_name'])
+            Purchase::with(['motorcycle:id,vehicle_code,frame_number,brand,model,year,status', 'supplier:id,supplier_name,phone,id_number,address'])
                 ->when($request->query('from'), fn ($q, $v) => $q->where('purchase_date', '>=', $v))
                 ->when($request->query('to'), fn ($q, $v) => $q->where('purchase_date', '<=', $v))
                 ->orderByDesc('purchase_date')->orderByDesc('id')
@@ -69,5 +70,31 @@ class PurchaseController extends Controller
         ));
 
         return response()->json($purchase->load('supplier'), 201);
+    }
+
+    /** Ubah data pembelian: penjual, tanggal, harga kesepakatan, uang yang dibayar, potongan, catatan. */
+    public function update(Request $request, Purchase $purchase, PurchaseService $service, PartyResolver $parties): JsonResponse
+    {
+        $data = $request->validate([
+            'purchase_date' => ['required', 'date'],
+            'purchase_price' => ['required', 'numeric', 'gt:0'],
+            'agreed_price' => ['nullable', 'numeric', 'gte:purchase_price'],
+            'deduction_notes' => ['nullable', 'string', 'max:500'],
+            'payment_method' => ['nullable', 'in:tunai,transfer'],
+            'notes' => ['nullable', 'string'],
+        ] + PartyResolver::rules('seller.', 'suppliers'));
+
+        $updated = DB::transaction(fn () => $service->update($purchase, [
+            'supplier_id' => $parties->supplier($data['seller'])->id,
+        ] + $data, $request->user()->id));
+
+        return response()->json($updated);
+    }
+
+    public function destroy(Purchase $purchase, PurchaseService $service): JsonResponse
+    {
+        $service->delete($purchase);
+
+        return response()->json(['message' => 'Pembelian, data motor, dan jurnalnya sudah dihapus.']);
     }
 }

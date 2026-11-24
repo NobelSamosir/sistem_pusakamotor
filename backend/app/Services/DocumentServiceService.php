@@ -58,4 +58,21 @@ class DocumentServiceService
             return $s->load('customer');
         });
     }
+
+    public function update(DocumentService $service, array $data, ?int $userId = null): DocumentService
+    {
+        return DB::transaction(function () use ($service, $data, $userId) {
+            $this->delete($service);
+
+            return $this->create($data, $userId);
+        });
+    }
+
+    public function delete(DocumentService $service): void
+    {
+        DB::transaction(function () use ($service) {
+            $this->journal->deleteForReference(JournalEntry::REF_DOCUMENT_SERVICE, $service->id);
+            $service->delete();
+        });
+    }
 }

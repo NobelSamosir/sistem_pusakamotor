@@ -59,4 +59,24 @@ class JournalController extends Controller
 
         return response()->json($entry->load('lines.account'), 201);
     }
+
+    /** Ubah setoran modal atau prive. */
+    public function updateManual(Request $request, JournalEntry $journal, CapitalService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'entry_date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'description' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        return response()->json($service->updateEntry($journal, $data['entry_date'], $data['amount'], $data['description'] ?? null, $request->user()->id)->load('lines.account'));
+    }
+
+    /** Hapus setoran modal atau prive. */
+    public function destroyManual(JournalEntry $journal, CapitalService $service): JsonResponse
+    {
+        $service->deleteEntry($journal);
+
+        return response()->json(['message' => 'Jurnal sudah dihapus.']);
+    }
 }

@@ -143,4 +143,24 @@ class SaleService
             return $sale;
         });
     }
+
+    /**
+     * Hapus (batalkan) penjualan yang salah input: jurnal penjualan, HPP, pencairan, dan
+     * komisi leasing dihapus; motor kembali ke stok; uang muka yang terpakai aktif kembali.
+     */
+    public function delete(Sale $sale): void
+    {
+        DB::transaction(function () use ($sale) {
+            foreach ([JournalEntry::REF_SALE, JournalEntry::REF_LEASING_DISBURSEMENT, JournalEntry::REF_LEASING_COMMISSION] as $ref) {
+                $this->journal->deleteForReference($ref, $sale->id);
+            }
+            $deposit = CustomerDeposit::where('sale_id', $sale->id)->first();
+            $deposit?->update(['status' => CustomerDeposit::AKTIF, 'sale_id' => null, 'closed_at' => null]);
+
+            Motorcycle::whereKey($sale->motorcycle_id)->update([
+                'status' => $deposit ? Motorcycle::STATUS_DIPESAN : Motorcycle::STATUS_TERSEDIA,
+            ]);
+            $sale->delete();
+        });
+    }
 }

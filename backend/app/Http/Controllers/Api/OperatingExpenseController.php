@@ -23,14 +23,29 @@ class OperatingExpenseController extends Controller
 
     public function store(Request $request, OperatingExpenseService $service): JsonResponse
     {
-        $data = $request->validate([
+        return response()->json($service->create($this->rules($request), $request->user()->id), 201);
+    }
+
+    public function update(Request $request, OperatingExpense $operatingExpense, OperatingExpenseService $service): JsonResponse
+    {
+        return response()->json($service->update($operatingExpense, $this->rules($request), $request->user()->id));
+    }
+
+    public function destroy(OperatingExpense $operatingExpense, OperatingExpenseService $service): JsonResponse
+    {
+        $service->delete($operatingExpense);
+
+        return response()->json(['message' => 'Beban dan jurnalnya sudah dihapus.']);
+    }
+
+    private function rules(Request $request): array
+    {
+        return $request->validate([
             'expense_date' => ['required', 'date'],
             'category' => ['required', 'in:listrik,gaji,sewa,iklan,kebersihan,lainnya'],
             'description' => ['nullable', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'source' => ['nullable', 'in:kas,perlengkapan'],
         ]);
-
-        return response()->json($service->create($data, $request->user()->id), 201);
     }
 }

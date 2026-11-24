@@ -51,4 +51,12 @@ class SaleController extends Controller
 
         return response()->json($sale->load(['motorcycle', 'customer']), 201);
     }
+
+    /** Hapus penjualan yang salah input; motor kembali ke stok dan uang muka aktif kembali. */
+    public function destroy(Sale $sale, SaleService $service): JsonResponse
+    {
+        $service->delete($sale);
+
+        return response()->json(['message' => 'Penjualan dan jurnalnya sudah dihapus. Motor kembali ke stok.']);
+    }
 }

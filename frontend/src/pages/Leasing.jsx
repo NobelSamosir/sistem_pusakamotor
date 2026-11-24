@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import api, { errorMessage } from '../lib/api'
 import useFetch from '../lib/useFetch'
 import { rupiah, tanggal, today, unitLabel } from '../lib/format'
+import { useSave } from '../components/confirm'
 import { Alert, Badge, Button, Card, Input, MoneyInput, PageHeader, Pagination, Select, StatCard, Table, useFlash } from '../components/ui'
 
 export default function Leasing() {
@@ -16,27 +17,32 @@ export default function Leasing() {
   const dash = useFetch('/dashboard')
   const o = dash.data?.outstanding
 
-  const run = async (fn, pesan) => {
+  const save = useSave()
+  const jalankan = (opts, fn, pesan, selesai) => save.run(opts, async () => {
     setError('')
-    try { await fn(); setOk(pesan); list.reload(); dash.reload(); return true } catch (err) { setError(errorMessage(err)); return false }
-  }
+    try { await fn(); setOk(pesan); selesai(); list.reload(); dash.reload() } catch (err) { setError(errorMessage(err)) }
+  })
 
-  const simpanCair = async (e) => {
+  const simpanCair = (e) => {
     e.preventDefault()
-    const done = await run(
+    const rows = [['Penjualan', cair.sale.sale_number], ['Leasing', cair.sale.leasing_company], ['Dana cair', rupiah(cair.sale.financed_amount)], ['Tanggal cair', tanggal(cair.disbursed_at)]]
+    if (Number(cair.commission) > 0) rows.push(['Komisi', rupiah(cair.commission)])
+    jalankan(
+      { title: 'Catat pencairan dana leasing?', rows },
       () => api.post(`/leasing/${cair.sale.id}/disburse`, { disbursed_at: cair.disbursed_at, commission: cair.commission || null }),
       cair.commission ? 'Pencairan dan komisi tercatat.' : 'Pencairan tercatat: Kas (debit) / Piutang Perusahaan Pembiayaan (kredit).',
+      () => setCair(null),
     )
-    if (done) setCair(null)
   }
 
-  const simpanKomisi = async (e) => {
+  const simpanKomisi = (e) => {
     e.preventDefault()
-    const done = await run(
+    jalankan(
+      { title: 'Catat komisi leasing?', rows: [['Penjualan', komisi.sale.sale_number], ['Leasing', komisi.sale.leasing_company], ['Tanggal', tanggal(komisi.received_at)], ['Komisi', rupiah(komisi.amount)]] },
       () => api.post(`/leasing/${komisi.sale.id}/commission`, { received_at: komisi.received_at, amount: komisi.amount }),
       'Komisi leasing tercatat sebagai pendapatan.',
+      () => setKomisi(null),
     )
-    if (done) setKomisi(null)
   }
 
 
@@ -61,7 +67,7 @@ export default function Leasing() {
             </div>
             <MoneyInput label="Komisi ikut cair (opsional)" hint="Kosongkan jika komisi dibayar terpisah" value={cair.commission} onChange={(v) => setCair({ ...cair, commission: v })} />
             <div className="flex items-end gap-2">
-              <Button>Simpan</Button>
+              <Button disabled={save.busy}>Simpan</Button>
               <Button type="button" variant="secondary" onClick={() => setCair(null)}>Batal</Button>
             </div>
           </form>
@@ -74,7 +80,7 @@ export default function Leasing() {
             <Input label="Tanggal diterima" type="date" value={komisi.received_at} onChange={(e) => setKomisi({ ...komisi, received_at: e.target.value })} required />
             <MoneyInput label="Nominal komisi" value={komisi.amount} onChange={(v) => setKomisi({ ...komisi, amount: v })} required />
             <div className="flex items-end gap-2 md:col-span-2">
-              <Button>Simpan komisi</Button>
+              <Button disabled={save.busy}>Simpan komisi</Button>
               <Button type="button" variant="secondary" onClick={() => setKomisi(null)}>Batal</Button>
             </div>
           </form>

@@ -65,4 +65,27 @@ class VehicleCostService
             return $cost;
         });
     }
+
+    /** Ubah biaya kendaraan (hanya selama motor masih di showroom). */
+    public function update(VehicleCost $cost, array $data, ?int $userId = null): VehicleCost
+    {
+        return DB::transaction(function () use ($cost, $data, $userId) {
+            $this->delete($cost);
+
+            return $this->create($data + ['motorcycle_id' => $cost->motorcycle_id], $userId);
+        });
+    }
+
+    /** Hapus biaya kendaraan beserta jurnalnya. Biaya motor yang sudah terjual tidak bisa dihapus karena sudah masuk HPP penjualan. */
+    public function delete(VehicleCost $cost): void
+    {
+        $motorcycle = $cost->motorcycle;
+        if ($motorcycle && ! $motorcycle->isInShowroom()) {
+            throw new BusinessRuleException('Biaya motor yang sudah terjual tidak bisa diubah atau dihapus karena sudah masuk HPP penjualan. Hapus penjualannya terlebih dahulu bila memang salah.');
+        }
+        DB::transaction(function () use ($cost) {
+            $this->journal->deleteForReference(JournalEntry::REF_VEHICLE_COST, $cost->id);
+            $cost->delete();
+        });
+    }
 }

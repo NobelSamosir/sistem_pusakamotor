@@ -1,7 +1,13 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import api, { errorMessage } from '../lib/api'
+import MotorFields, { emptyMotor, motorPayload } from '../components/MotorFields'
+import { useSave } from '../components/confirm'
 import useFetch from '../lib/useFetch'
 import { persen, rupiah, tanggal } from '../lib/format'
-import { Alert, Badge, Button, Card, Loading, PageHeader, Table } from '../components/ui'
+import { Alert, Badge, Button, Card, Input, Loading, PageHeader, Table, Textarea } from '../components/ui'
+
+const IDENT = ['frame_number', 'engine_number', 'license_plate', 'bpkb_number', 'color', 'condition_notes']
 
 const Row = ({ k, v }) => (
   <div className="flex justify-between border-b border-slate-100 py-2 text-sm">
@@ -11,7 +17,10 @@ const Row = ({ k, v }) => (
 
 export default function MotorDetail() {
   const { id } = useParams()
-  const { data: m, loading, error } = useFetch(`/motorcycles/${id}`)
+  const { data: m, loading, error, reload } = useFetch(`/motorcycles/${id}`)
+  const [edit, setEdit] = useState(null)
+  const [msg, setMsg] = useState({ ok: '', err: '' })
+  const { busy, run } = useSave()
   if (loading) return <Loading />
   if (error) return <Alert>{error}</Alert>
 
@@ -20,6 +29,25 @@ export default function MotorDetail() {
   const gone = sold
   const deposit = (m.deposits || []).find((x) => x.status === 'aktif')
 
+  const mulaiUbah = () => {
+    const v = {}
+    Object.keys(emptyMotor).forEach((k) => { v[k] = m[k] ?? emptyMotor[k] })
+    IDENT.forEach((k) => { v[k] = m[k] || '' })
+    setEdit(v); setMsg({ ok: '', err: '' })
+  }
+  const setE = (k) => (e) => setEdit({ ...edit, [k]: e.target.value })
+  const simpan = (e) => {
+    e.preventDefault()
+    run({ title: 'Simpan perubahan data motor?', rows: [['Unit', `${edit.brand} ${edit.model} ${edit.year}`], ['Nomor rangka', edit.frame_number], ['Nomor mesin', edit.engine_number]], message: 'Perubahan ini tidak mengubah jurnal.' }, async () => {
+      try {
+        const body = { ...motorPayload(edit) }
+        IDENT.forEach((k) => { if (body[k] === '') body[k] = null })
+        await api.put(`/motorcycles/${m.id}`, body)
+        setEdit(null); setMsg({ ok: 'Data motor diubah.', err: '' }); reload()
+      } catch (err) { setMsg({ ok: '', err: errorMessage(err) }) }
+    })
+  }
+
   return (
     <div>
       <PageHeader
@@ -27,12 +55,34 @@ export default function MotorDetail() {
         subtitle={`${m.vehicle_code} · Nomor rangka ${m.frame_number}`}
         actions={!gone && (
           <>
+            <Button variant="secondary" onClick={mulaiUbah}>Ubah data motor</Button>
             <Link to={`/biaya?motor=${m.id}`}><Button variant="secondary">+ Biaya</Button></Link>
             <Link to={`/rekomendasi?tab=jual&motor=${m.id}`}><Button variant="secondary">Rekomendasi harga jual</Button></Link>
             <Link to={`/penjualan?motor=${m.id}`}><Button>Catat penjualan</Button></Link>
           </>
         )}
       />
+      <Alert>{msg.err}</Alert>
+      <Alert type="success">{msg.ok}</Alert>
+      {edit && (
+        <Card title="Ubah data motor" className="mb-6 ring-2 ring-teal-200">
+          <form onSubmit={simpan} className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Input label="Nomor rangka" value={edit.frame_number} onChange={setE('frame_number')} required />
+              <Input label="Nomor mesin" value={edit.engine_number} onChange={setE('engine_number')} required />
+              <Input label="Nomor polisi" value={edit.license_plate} onChange={setE('license_plate')} />
+              <Input label="Nomor BPKB" value={edit.bpkb_number} onChange={setE('bpkb_number')} />
+              <Input label="Warna" value={edit.color} onChange={setE('color')} />
+              <Textarea label="Catatan kondisi" value={edit.condition_notes} onChange={setE('condition_notes')} />
+            </div>
+            <MotorFields value={edit} onChange={setEdit} />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setEdit(null)}>Batal ubah</Button>
+              <Button disabled={busy}>{busy ? 'Menyimpan...' : 'Simpan perubahan'}</Button>
+            </div>
+          </form>
+        </Card>
+      )}
       {deposit && (
         <Alert type="warning">
           Dipesan {deposit.customer?.customer_name} dengan uang muka {rupiah(deposit.amount)} ({deposit.deposit_number}, {tanggal(deposit.deposit_date)}).

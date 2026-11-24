@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import api, { errorMessage } from '../lib/api'
 import useFetch from '../lib/useFetch'
+import { useSave } from '../components/confirm'
 import { Alert, Button, Card, Input, PageHeader, Select, Table, Tabs } from '../components/ui'
 
 function Party({ type }) {
@@ -11,9 +12,11 @@ function Party({ type }) {
   const { data, reload, error: loadError } = useFetch(url)
   const [form, setForm] = useState(null) // data yang sedang diubah
   const [error, setError] = useState('')
+  const { busy, run } = useSave()
 
-  const submit = async (e) => {
+  const submit = (e) => {
     e.preventDefault(); setError('')
+    run({ title: 'Simpan perubahan identitas?', rows: [['Nama', form[nameKey]], ['No. HP', form.phone || '-'], ['NIK', form.id_number || '-']] }, async () => {
     try {
       await api.put(`${url}/${form.id}`, {
         [nameKey]: form[nameKey], [typeKey]: form[typeKey] || 'perorangan', phone: form.phone || null,
@@ -21,11 +24,11 @@ function Party({ type }) {
       })
       setForm(null); reload()
     } catch (err) { setError(errorMessage(err)) }
+    })
   }
-  const remove = async (r) => {
-    if (!window.confirm(`Hapus ${r[nameKey]}?`)) return
+  const remove = (r) => run({ title: `Hapus ${r[nameKey]}?`, danger: true, okLabel: 'Ya, hapus', message: 'Hanya bisa bila belum dipakai di transaksi mana pun.' }, async () => {
     try { await api.delete(`${url}/${r.id}`); reload() } catch (err) { setError(errorMessage(err)) }
-  }
+  })
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
   return (
@@ -42,7 +45,7 @@ function Party({ type }) {
               : <div />}
             <Input label="Alamat" className="md:col-span-2 xl:col-span-4" value={form.address || ''} onChange={set('address')} />
             <div className="flex gap-2 md:col-span-2 xl:col-span-4">
-              <Button>Simpan perubahan</Button>
+              <Button disabled={busy}>Simpan perubahan</Button>
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>Batal</Button>
             </div>
           </form>

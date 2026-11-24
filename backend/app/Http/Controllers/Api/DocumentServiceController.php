@@ -28,22 +28,40 @@ class DocumentServiceController extends Controller
 
     public function store(Request $request, DocumentServiceService $service, PartyResolver $parties): JsonResponse
     {
+        return response()->json($this->save($request, $service, $parties), 201);
+    }
+
+    public function update(Request $request, DocumentService $documentService, DocumentServiceService $service, PartyResolver $parties): JsonResponse
+    {
+        return response()->json($this->save($request, $service, $parties, $documentService));
+    }
+
+    public function destroy(DocumentService $documentService, DocumentServiceService $service): JsonResponse
+    {
+        $service->delete($documentService);
+
+        return response()->json(['message' => 'Pendapatan lain dan jurnalnya sudah dihapus.']);
+    }
+
+    /** Jenis pendapatan cukup ditulis di keterangan; biaya yang diteruskan (mis. ke Samsat) boleh 0. */
+    private function save(Request $request, DocumentServiceService $service, PartyResolver $parties, ?DocumentService $old = null): DocumentService
+    {
         $data = $request->validate([
             'service_date' => ['required', 'date'],
-            'service_type' => ['required', Rule::in(DocumentService::TYPES)],
-            'license_plate' => ['nullable', 'string', 'max:20'],
-            'description' => ['nullable', 'string', 'max:255'],
+            'description' => ['required', 'string', 'max:255'],
+            'service_type' => ['nullable', Rule::in(DocumentService::TYPES)],
             'amount_received' => ['required', 'numeric', 'gt:0'],
-            'amount_paid' => ['required', 'numeric', 'min:0'],
+            'amount_paid' => ['nullable', 'numeric', 'min:0'],
         ] + PartyResolver::rules('customer.', 'customers', false));
+        $data['service_type'] = $data['service_type'] ?? 'lainnya';
+        $data['amount_paid'] = $data['amount_paid'] ?? 0;
 
-        return response()->json(DB::transaction(function () use ($data, $service, $parties, $request) {
-            // Nama pelanggan opsional; bila diisi, dicatat sebagai pelanggan
+        return DB::transaction(function () use ($data, $service, $parties, $request, $old) {
             if (! empty($data['customer']['name'])) {
                 $data['customer_id'] = $parties->customer($data['customer'])->id;
             }
 
-            return $service->create($data, $request->user()->id);
-        }), 201);
+            return $old ? $service->update($old, $data, $request->user()->id) : $service->create($data, $request->user()->id);
+        });
     }
 }

@@ -50,4 +50,23 @@ class OperatingExpenseService
             return $expense;
         });
     }
+
+    /** Ubah beban: jurnal lama dihapus, data dan jurnal dibuat ulang dengan isian baru. */
+    public function update(OperatingExpense $expense, array $data, ?int $userId = null): OperatingExpense
+    {
+        return DB::transaction(function () use ($expense, $data, $userId) {
+            $this->delete($expense);
+
+            return $this->create($data, $userId);
+        });
+    }
+
+    /** Hapus beban beserta jurnalnya. */
+    public function delete(OperatingExpense $expense): void
+    {
+        DB::transaction(function () use ($expense) {
+            $this->journal->deleteForReference(JournalEntry::REF_OPERATING_EXPENSE, $expense->id);
+            $expense->delete();
+        });
+    }
 }

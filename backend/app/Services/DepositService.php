@@ -98,4 +98,35 @@ class DepositService
             return $deposit;
         });
     }
+
+    /** Ubah uang muka yang masih aktif (tanggal, nominal, keterangan, pembeli). */
+    public function update(CustomerDeposit $deposit, array $data, ?int $userId = null): CustomerDeposit
+    {
+        if ($deposit->status !== CustomerDeposit::AKTIF) {
+            throw new BusinessRuleException("Uang muka berstatus {$deposit->status} tidak bisa diubah.");
+        }
+
+        return DB::transaction(function () use ($deposit, $data, $userId) {
+            $motorId = $deposit->motorcycle_id;
+            $this->delete($deposit);
+
+            return $this->create($data + ['motorcycle_id' => $motorId], $userId);
+        });
+    }
+
+    /** Hapus uang muka beserta semua jurnalnya. Uang muka yang sudah dipakai penjualan tidak bisa dihapus. */
+    public function delete(CustomerDeposit $deposit): void
+    {
+        if ($deposit->status === CustomerDeposit::DIPAKAI) {
+            throw new BusinessRuleException('Uang muka ini sudah dipakai dalam penjualan. Hapus penjualannya terlebih dahulu bila memang salah.');
+        }
+        DB::transaction(function () use ($deposit) {
+            $this->journal->deleteForReference(JournalEntry::REF_DEPOSIT, $deposit->id);
+            if ($deposit->status === CustomerDeposit::AKTIF && $deposit->motorcycle_id) {
+                Motorcycle::whereKey($deposit->motorcycle_id)->where('status', Motorcycle::STATUS_DIPESAN)
+                    ->update(['status' => Motorcycle::STATUS_TERSEDIA]);
+            }
+            $deposit->delete();
+        });
+    }
 }

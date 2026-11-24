@@ -9,6 +9,7 @@ use App\Models\Motorcycle;
 use App\Models\PricePrediction;
 use App\Models\PriceRecommendation;
 use App\Models\Purchase;
+use App\Models\VehicleCost;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -89,6 +90,75 @@ class PurchaseService
             }
 
             return $record->load('motorcycle');
+        });
+    }
+
+    /**
+     * Ubah data pembelian (penjual, tanggal, harga, potongan, catatan). Karakteristik motor
+     * diubah lewat data motor. Jurnal pembelian dihapus lalu dibuat ulang dengan angka baru.
+     */
+    public function update(Purchase $record, array $purchase, ?int $userId = null): Purchase
+    {
+        $motorcycle = $record->motorcycle;
+        if (! $motorcycle->isInShowroom()) {
+            throw new BusinessRuleException('Pembelian motor yang sudah terjual tidak bisa diubah karena HPP-nya sudah dipakai di penjualan. Hapus penjualannya terlebih dahulu bila memang salah.');
+        }
+        if (! Money::of($purchase['purchase_price'] ?? 0)->isPositive()) {
+            throw new BusinessRuleException('Harga beli harus lebih dari 0.');
+        }
+        $agreed = isset($purchase['agreed_price']) && $purchase['agreed_price'] !== '' ? Money::of($purchase['agreed_price']) : null;
+        if ($agreed && $agreed->isLessThan(Money::of($purchase['purchase_price']))) {
+            throw new BusinessRuleException('Harga kesepakatan tidak boleh lebih kecil dari uang yang dibayar ke penjual.');
+        }
+
+        return DB::transaction(function () use ($record, $purchase, $agreed, $motorcycle, $userId) {
+            $record->update([
+                'supplier_id' => $purchase['supplier_id'],
+                'purchase_date' => $purchase['purchase_date'],
+                'purchase_price' => Money::str(Money::of($purchase['purchase_price'])),
+                'agreed_price' => $agreed ? Money::str($agreed) : null,
+                'deduction_notes' => $purchase['deduction_notes'] ?? null,
+                'payment_method' => $purchase['payment_method'] ?? $record->payment_method,
+                'notes' => $purchase['notes'] ?? null,
+            ]);
+
+            $this->journal->deleteForReference(JournalEntry::REF_PURCHASE, $record->id);
+            $this->journal->post(
+                $record->purchase_date->toDateString(),
+                "Pembelian {$motorcycle->brand} {$motorcycle->model} {$motorcycle->year} ({$motorcycle->frame_number})",
+                JournalEntry::REF_PURCHASE,
+                $record->id,
+                [
+                    ['account' => Account::PERSEDIAAN, 'debit' => $record->purchase_price],
+                    ['account' => Account::KAS, 'credit' => $record->purchase_price],
+                ],
+                $userId,
+            );
+
+            return $record->fresh(['motorcycle', 'supplier']);
+        });
+    }
+
+    /** Hapus pembelian beserta data motor dan jurnalnya. Hanya bila motor belum punya transaksi lain. */
+    public function delete(Purchase $record): void
+    {
+        $motorcycle = $record->motorcycle;
+        if ($motorcycle->sale()->exists()) {
+            throw new BusinessRuleException('Motor ini sudah terjual. Hapus penjualannya terlebih dahulu.');
+        }
+        if ($motorcycle->deposits()->exists()) {
+            throw new BusinessRuleException('Motor ini punya data uang muka. Hapus uang mukanya terlebih dahulu.');
+        }
+        if (VehicleCost::where('motorcycle_id', $motorcycle->id)->exists()) {
+            throw new BusinessRuleException('Motor ini punya biaya kendaraan. Hapus biayanya terlebih dahulu di menu Biaya Kendaraan.');
+        }
+
+        DB::transaction(function () use ($record, $motorcycle) {
+            $this->journal->deleteForReference(JournalEntry::REF_PURCHASE, $record->id);
+            PriceRecommendation::where('motorcycle_id', $motorcycle->id)->update(['motorcycle_id' => null]);
+            PricePrediction::where('motorcycle_id', $motorcycle->id)->update(['motorcycle_id' => null]);
+            $record->delete();
+            $motorcycle->delete();
         });
     }
 }

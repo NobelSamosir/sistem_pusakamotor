@@ -25,16 +25,32 @@ class VehicleCostController extends Controller
 
     public function store(Request $request, VehicleCostService $service): JsonResponse
     {
-        $data = $request->validate([
-            'motorcycle_id' => ['required', 'exists:motorcycles,id'],
+        $data = $request->validate(['motorcycle_id' => ['required', 'exists:motorcycles,id']] + $this->rules());
+
+        return response()->json($service->create($data, $request->user()->id), 201);
+    }
+
+    public function update(Request $request, VehicleCost $vehicleCost, VehicleCostService $service): JsonResponse
+    {
+        return response()->json($service->update($vehicleCost, $request->validate($this->rules()), $request->user()->id));
+    }
+
+    public function destroy(VehicleCost $vehicleCost, VehicleCostService $service): JsonResponse
+    {
+        $service->delete($vehicleCost);
+
+        return response()->json(['message' => 'Biaya dan jurnalnya sudah dihapus.']);
+    }
+
+    private function rules(): array
+    {
+        return [
             'cost_date' => ['required', 'date'],
             'cost_category' => ['required', 'in:servis,sparepart,cat_body,administrasi,lainnya'],
             'description' => ['nullable', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'source' => ['nullable', 'in:kas,perlengkapan'],
             'hpp_included' => ['required', 'boolean'],
-        ]);
-
-        return response()->json($service->create($data, $request->user()->id), 201);
+        ];
     }
 }

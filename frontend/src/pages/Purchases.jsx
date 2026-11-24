@@ -5,6 +5,7 @@ import useFetch from '../lib/useFetch'
 import { rupiah, tanggal, today } from '../lib/format'
 import MotorFields, { emptyMotor, motorPayload } from '../components/MotorFields'
 import IdentityFields, { emptyIdentity as emptyParty, identityPayload } from '../components/IdentityFields'
+import { RowActions, useSave } from '../components/confirm'
 import { Alert, Button, Card, Input, MoneyInput, PageHeader, Pagination, Select, Table, Textarea } from '../components/ui'
 
 const emptyIdentity = { frame_number: '', engine_number: '', license_plate: '', bpkb_number: '', color: '', condition_notes: '' }
@@ -18,7 +19,9 @@ export default function Purchases() {
     purchase_date: today(), agreed_price: fromDss?.price || '', deduction: fromDss?.deduction || '', deduction_notes: fromDss?.deduction ? 'Servis/pajak sesuai DSS' : '', payment_method: 'tunai', notes: '',
   })
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [ok, setOk] = useState('')
+  const [edit, setEdit] = useState(null)
+  const { busy, run } = useSave()
   const [page, setPage] = useState(1)
   const list = useFetch('/purchases', { page })
 
@@ -28,9 +31,19 @@ export default function Purchases() {
   const potongan = Number(form.deduction || 0)
   const dibayar = sepakat - potongan
 
-  const submit = async (e) => {
-    e.preventDefault()
-    setBusy(true); setError('')
+  const submit = (e) => {
+    e.preventDefault(); setError('')
+    run({
+      title: 'Simpan pembelian ini?',
+      rows: [
+        ['Unit', `${motor.brand || ''} ${motor.model || ''} ${motor.year || ''}`],
+        ['Nomor rangka', ident.frame_number],
+        ['Penjual', seller.name],
+        ['Harga kesepakatan', rupiah(sepakat)],
+        ...(potongan > 0 ? [['Potongan', rupiah(potongan)]] : []),
+        ['Dibayar ke penjual', rupiah(dibayar)],
+      ],
+    }, async () => {
     try {
       const { data } = await api.post('/purchases', {
         motorcycle: { ...motorPayload(motor), ...ident },
@@ -44,8 +57,46 @@ export default function Purchases() {
         recommendation_id: fromDss?.recommendationId || null,
       })
       navigate(`/motor/${data.motorcycle_id}`)
-    } catch (err) { setError(errorMessage(err)) } finally { setBusy(false) }
+    } catch (err) { setError(errorMessage(err)) }
+    })
   }
+
+  const ubah = (r) => {
+    const agreed = Number(r.agreed_price || r.purchase_price)
+    setEdit({
+      id: r.id, number: r.purchase_number, unit: `${r.motorcycle.vehicle_code} · ${r.motorcycle.brand} ${r.motorcycle.model} ${r.motorcycle.year}`,
+      purchase_date: r.purchase_date.slice(0, 10), agreed_price: agreed, deduction: agreed - Number(r.purchase_price) || '',
+      deduction_notes: r.deduction_notes || '', payment_method: r.payment_method || 'tunai', notes: r.notes || '',
+      seller: r.supplier ? { ...emptyParty, id: r.supplier_id, name: r.supplier.supplier_name, phone: r.supplier.phone || '', id_number: r.supplier.id_number || '', address: r.supplier.address || '' } : emptyParty,
+    })
+    setOk(''); setError('')
+    setTimeout(() => document.getElementById('form-ubah-beli')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
+
+  const simpanUbah = (e) => {
+    e.preventDefault(); setError('')
+    const agreed = Number(edit.agreed_price || 0)
+    const paid = agreed - Number(edit.deduction || 0)
+    run({ title: `Simpan perubahan ${edit.number}?`, rows: [['Unit', edit.unit], ['Penjual', edit.seller.name], ['Harga kesepakatan', rupiah(agreed)], ['Dibayar ke penjual', rupiah(paid)]], message: 'Jurnal pembelian dan HPP unit ikut disesuaikan.' }, async () => {
+      try {
+        await api.put(`/purchases/${edit.id}`, {
+          purchase_date: edit.purchase_date, purchase_price: paid, agreed_price: agreed,
+          deduction_notes: Number(edit.deduction || 0) > 0 ? edit.deduction_notes || null : null,
+          payment_method: edit.payment_method, notes: edit.notes, seller: identityPayload(edit.seller),
+        })
+        setOk('Pembelian diubah dan jurnalnya disesuaikan.'); setEdit(null); list.reload()
+      } catch (err) { setError(errorMessage(err)) }
+    })
+  }
+
+  const hapus = (r) => run({
+    title: 'Hapus pembelian ini?', danger: true, okLabel: 'Ya, hapus',
+    rows: [['No.', r.purchase_number], ['Unit', `${r.motorcycle.brand} ${r.motorcycle.model} ${r.motorcycle.year}`], ['Penjual', r.supplier?.supplier_name], ['Dibayar', rupiah(r.purchase_price)]],
+    message: 'Data motor dan jurnal pembeliannya ikut dihapus. Hanya bisa bila motor belum dijual dan belum punya uang muka atau biaya.',
+  }, async () => {
+    setError('')
+    try { await api.delete(`/purchases/${r.id}`); setOk('Pembelian, data motor, dan jurnalnya sudah dihapus.'); if (edit?.id === r.id) setEdit(null); list.reload() } catch (err) { setError(errorMessage(err)) }
+  })
 
   return (
     <div>
@@ -95,7 +146,33 @@ export default function Purchases() {
         </Card>
       </form>
 
+      {edit && (
+        <div id="form-ubah-beli"><Card title={`Ubah pembelian ${edit.number}`} className="mt-6 ring-2 ring-teal-200">
+          <form onSubmit={simpanUbah} className="grid gap-4 md:grid-cols-2">
+            <Input label="Unit" value={edit.unit} readOnly disabled className="md:col-span-2" />
+            <div className="md:col-span-2"><IdentityFields kind="supplier" title="Identitas penjual" value={edit.seller} onChange={(v) => setEdit({ ...edit, seller: v })} /></div>
+            <Input label="Tanggal beli" type="date" value={edit.purchase_date} onChange={(e) => setEdit({ ...edit, purchase_date: e.target.value })} required />
+            <MoneyInput label="Harga kesepakatan" value={edit.agreed_price} onChange={(v) => setEdit({ ...edit, agreed_price: v })} required />
+            <MoneyInput label="Potongan biaya (pajak, perbaikan)" value={edit.deduction} onChange={(v) => setEdit({ ...edit, deduction: v })} />
+            <Input label="Rincian potongan" value={edit.deduction_notes} onChange={(e) => setEdit({ ...edit, deduction_notes: e.target.value })} />
+            <div className="md:col-span-2 rounded-lg bg-teal-50 p-3 text-sm">
+              <p className="text-teal-800">Dibayar ke penjual</p>
+              <p className="text-lg font-semibold text-teal-900">{rupiah(Number(edit.agreed_price || 0) - Number(edit.deduction || 0))}</p>
+            </div>
+            <Select label="Metode bayar" options={[{ value: 'tunai', label: 'Tunai' }, { value: 'transfer', label: 'Transfer' }]} value={edit.payment_method} onChange={(e) => setEdit({ ...edit, payment_method: e.target.value })} />
+            <Textarea label="Keterangan" value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} />
+            <p className="md:col-span-2 text-xs text-slate-500">Data fisik motor (merek, tahun, nomor rangka) diubah lewat tombol Ubah data motor di halaman detail motor.</p>
+            <div className="md:col-span-2 flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setEdit(null)}>Batal ubah</Button>
+              <Button disabled={busy}>{busy ? 'Menyimpan...' : 'Simpan perubahan'}</Button>
+            </div>
+          </form>
+        </Card></div>
+      )}
+
       <Card title="Riwayat pembelian" className="mt-6">
+        {!edit && <><Alert>{error}</Alert><Alert type="success">{ok}</Alert></>}
+        {edit && <Alert>{error}</Alert>}
         <Table
           columns={[
             { key: 'purchase_number', label: 'No.' },
@@ -104,6 +181,7 @@ export default function Purchases() {
             { key: 'supplier', label: 'Penjual', render: (r) => r.supplier?.supplier_name },
             { key: 'agreed_price', label: 'Kesepakatan', right: true, render: (r) => rupiah(r.agreed_price || r.purchase_price) },
             { key: 'purchase_price', label: 'Dibayar', right: true, render: (r) => rupiah(r.purchase_price) },
+            { key: 'aksi', label: '', render: (r) => <RowActions disabled={busy} onEdit={r.motorcycle.status !== 'terjual' ? () => ubah(r) : null} onDelete={r.motorcycle.status !== 'terjual' ? () => hapus(r) : null} /> },
           ]}
           rows={list.data?.data}
         />

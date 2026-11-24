@@ -35,13 +35,30 @@ class SupplyController extends Controller
 
     public function store(Request $request, SupplyService $supplies): JsonResponse
     {
-        $data = $request->validate([
+        $data = $this->rules($request);
+
+        return response()->json($supplies->purchase($data, $request->user()->id), 201);
+    }
+
+    public function update(Request $request, SupplyPurchase $supply, SupplyService $supplies): JsonResponse
+    {
+        return response()->json($supplies->update($supply, $this->rules($request), $request->user()->id));
+    }
+
+    public function destroy(SupplyPurchase $supply, SupplyService $supplies): JsonResponse
+    {
+        $supplies->delete($supply);
+
+        return response()->json(['message' => 'Pembelian perlengkapan dan jurnalnya sudah dihapus.']);
+    }
+
+    private function rules(Request $request): array
+    {
+        return $request->validate([
             'purchase_date' => ['required', 'date'],
             'description' => ['required', 'string', 'max:255'],
             'vendor' => ['nullable', 'string', 'max:100'],
             'amount' => ['required', 'numeric', 'gt:0'],
         ]);
-
-        return response()->json($supplies->purchase($data, $request->user()->id), 201);
     }
 }

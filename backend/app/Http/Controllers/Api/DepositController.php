@@ -30,8 +30,7 @@ class DepositController extends Controller
     public function store(Request $request, DepositService $service, PartyResolver $parties): JsonResponse
     {
         $data = $request->validate([
-            'motorcycle_id' => ['nullable', 'exists:motorcycles,id'],
-            'unit_description' => ['required_without:motorcycle_id', 'nullable', 'string', 'max:255'],
+            'motorcycle_id' => ['required', 'exists:motorcycles,id'],
             'deposit_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'notes' => ['nullable', 'string'],
@@ -58,5 +57,30 @@ class DepositController extends Controller
         $data = $request->validate(['date' => ['required', 'date']]);
 
         return response()->json($service->forfeit($deposit, $data['date'], $request->user()->id));
+    }
+
+    /** Ubah uang muka yang masih aktif (tanggal, nominal, keterangan, identitas pembeli). */
+    public function update(Request $request, CustomerDeposit $deposit, DepositService $service, PartyResolver $parties): JsonResponse
+    {
+        $data = $request->validate([
+            'deposit_date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'notes' => ['nullable', 'string'],
+        ] + PartyResolver::rules('buyer.', 'customers'));
+
+        $updated = DB::transaction(function () use ($data, $deposit, $service, $parties, $request) {
+            $data['customer_id'] = $parties->customer($data['buyer'])->id;
+
+            return $service->update($deposit, $data, $request->user()->id);
+        });
+
+        return response()->json($updated->load('motorcycle', 'customer'));
+    }
+
+    public function destroy(CustomerDeposit $deposit, DepositService $service): JsonResponse
+    {
+        $service->delete($deposit);
+
+        return response()->json(['message' => 'Uang muka dan jurnalnya sudah dihapus.']);
     }
 }

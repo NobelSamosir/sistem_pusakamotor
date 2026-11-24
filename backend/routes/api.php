@@ -47,12 +47,19 @@ Route::middleware('auth:sanctum')->group(function () {
     // Transaksi
     Route::get('/purchases', [PurchaseController::class, 'index']);
     Route::post('/purchases', [PurchaseController::class, 'store']);
+    Route::put('/purchases/{purchase}', [PurchaseController::class, 'update']);
+    Route::delete('/purchases/{purchase}', [PurchaseController::class, 'destroy']);
     Route::get('/vehicle-costs', [VehicleCostController::class, 'index']);
     Route::post('/vehicle-costs', [VehicleCostController::class, 'store']);
+    Route::put('/vehicle-costs/{vehicleCost}', [VehicleCostController::class, 'update']);
+    Route::delete('/vehicle-costs/{vehicleCost}', [VehicleCostController::class, 'destroy']);
     Route::get('/sales', [SaleController::class, 'index']);
     Route::post('/sales', [SaleController::class, 'store']);
+    Route::delete('/sales/{sale}', [SaleController::class, 'destroy']);
     Route::get('/operating-expenses', [OperatingExpenseController::class, 'index']);
     Route::post('/operating-expenses', [OperatingExpenseController::class, 'store']);
+    Route::put('/operating-expenses/{operatingExpense}', [OperatingExpenseController::class, 'update']);
+    Route::delete('/operating-expenses/{operatingExpense}', [OperatingExpenseController::class, 'destroy']);
 
     // Penjualan kredit (leasing)
     Route::get('/leasing', [LeasingController::class, 'index']);
@@ -63,6 +70,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Uang muka / tanda jadi pelanggan
     Route::get('/deposits', [DepositController::class, 'index']);
     Route::post('/deposits', [DepositController::class, 'store']);
+    Route::put('/deposits/{deposit}', [DepositController::class, 'update']);
+    Route::delete('/deposits/{deposit}', [DepositController::class, 'destroy']);
     Route::post('/deposits/{deposit}/refund', [DepositController::class, 'refund']);
     Route::post('/deposits/{deposit}/forfeit', [DepositController::class, 'forfeit']);
 
@@ -70,15 +79,21 @@ Route::middleware('auth:sanctum')->group(function () {
     // Pendapatan lain-lain: pengurusan surat, pengantaran pinjaman, bonus leasing
     Route::get('/document-services', [DocumentServiceController::class, 'index']);
     Route::post('/document-services', [DocumentServiceController::class, 'store']);
+    Route::put('/document-services/{documentService}', [DocumentServiceController::class, 'update']);
+    Route::delete('/document-services/{documentService}', [DocumentServiceController::class, 'destroy']);
 
     // Perlengkapan (bahan habis pakai)
     Route::get('/supplies', [SupplyController::class, 'index']);
     Route::post('/supplies', [SupplyController::class, 'store']);
+    Route::put('/supplies/{supply}', [SupplyController::class, 'update']);
+    Route::delete('/supplies/{supply}', [SupplyController::class, 'destroy']);
 
     // Jurnal
     Route::get('/journals', [JournalController::class, 'index']);
     Route::post('/journals/capital', [JournalController::class, 'storeCapital']);
     Route::post('/journals/withdrawal', [JournalController::class, 'storeWithdrawal']);
+    Route::put('/journals/{journal}', [JournalController::class, 'updateManual']);
+    Route::delete('/journals/{journal}', [JournalController::class, 'destroyManual']);
 
     // Prediksi harga dan DSS (RM 3)
     Route::get('/ml/options', [DssController::class, 'options']);

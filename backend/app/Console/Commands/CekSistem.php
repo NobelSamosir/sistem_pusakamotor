@@ -49,6 +49,15 @@ class CekSistem extends Command
         }
         $this->table(['Data', 'Tabel', 'Jumlah baris', 'Terakhir disimpan'], $rows);
 
+        $masalah = app(\App\Services\IntegrityCheck::class)->problems();
+        if ($masalah) {
+            $this->error(count($masalah).' data tidak sinkron (biasanya karena baris dihapus langsung di database):');
+            $this->table(['Jenis', 'Masalah', 'ID', 'Keterangan'], array_map('array_values', $masalah));
+            $this->line('Perbaiki lewat tombol Ubah/Hapus di aplikasi, jangan menghapus langsung di database.');
+        } else {
+            $this->info('Keutuhan data: setiap transaksi punya jurnal dan setiap jurnal punya transaksi.');
+        }
+
         $b = $reports->balanceSheet(now()->toDateString());
         $rp = fn ($v) => 'Rp'.number_format((float) $v, 0, ',', '.');
         $this->line('Saldo hari ini: Kas '.$rp($b['assets']['cash']).' | Persediaan '.$rp($b['assets']['inventory'])

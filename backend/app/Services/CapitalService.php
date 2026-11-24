@@ -49,4 +49,32 @@ class CapitalService
             ['account' => Account::KAS, 'credit' => Money::str($value)],
         ], $userId);
     }
+
+    /** Ubah setoran modal atau prive (jurnal manual). */
+    public function updateEntry(JournalEntry $entry, string $date, string|int|float $amount, ?string $description, ?int $userId = null): JournalEntry
+    {
+        $this->ensureManual($entry);
+
+        return DB::transaction(function () use ($entry, $date, $amount, $description, $userId) {
+            $prive = $entry->reference_type === JournalEntry::REF_PRIVE;
+            $entry->delete();
+
+            return $prive
+                ? $this->withdraw($date, $amount, $description ?: 'Pengambilan pribadi pemilik (prive)', $userId)
+                : $this->deposit($date, $amount, $description ?: 'Setoran modal pemilik', $userId);
+        });
+    }
+
+    public function deleteEntry(JournalEntry $entry): void
+    {
+        $this->ensureManual($entry);
+        $entry->delete();
+    }
+
+    private function ensureManual(JournalEntry $entry): void
+    {
+        if (! in_array($entry->reference_type, [JournalEntry::REF_MANUAL, JournalEntry::REF_PRIVE], true)) {
+            throw new BusinessRuleException('Jurnal ini dibuat otomatis oleh transaksi. Ubah atau hapus dari menu transaksinya.');
+        }
+    }
 }

@@ -63,4 +63,27 @@ class SupplyService
             throw new BusinessRuleException('Saldo perlengkapan tidak cukup (tersisa Rp'.number_format((float) (string) $saldo, 0, ',', '.').'). Catat pembelian perlengkapan terlebih dahulu.');
         }
     }
+
+    /** Ubah pembelian perlengkapan. */
+    public function update(SupplyPurchase $purchase, array $data, ?int $userId = null): SupplyPurchase
+    {
+        return DB::transaction(function () use ($purchase, $data, $userId) {
+            $this->delete($purchase, Money::of($data['amount'] ?? 0));
+
+            return $this->purchase($data, $userId);
+        });
+    }
+
+    /** Hapus pembelian perlengkapan, asal stok yang sudah terpakai tidak menjadi minus. */
+    public function delete(SupplyPurchase $purchase, ?BigDecimal $replacement = null): void
+    {
+        $after = $this->balance()->minus(Money::of($purchase->amount))->plus($replacement ?? Money::of(0));
+        if ($after->isNegative()) {
+            throw new BusinessRuleException('Perlengkapan dari pembelian ini sudah terpakai, jadi saldo akan menjadi minus. Hapus atau ubah dulu pemakaiannya di Biaya Kendaraan atau Beban Operasional.');
+        }
+        DB::transaction(function () use ($purchase) {
+            $this->journal->deleteForReference(JournalEntry::REF_SUPPLY_PURCHASE, $purchase->id);
+            $purchase->delete();
+        });
+    }
 }

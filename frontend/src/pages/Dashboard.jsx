@@ -35,11 +35,10 @@ export default function Dashboard() {
       </div>
 
       {d.outstanding && (
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
           <StatCard label="Kas" value={rupiah(d.outstanding.cash)} note={`Perlengkapan ${rupiah(d.outstanding.supplies)}`} tone="emerald" />
           <StatCard label="Piutang leasing" value={rupiah(d.outstanding.leasing_receivable)} note={`${d.outstanding.leasing_waiting} transaksi menunggu cair`} tone="sky" />
           <StatCard label="Uang muka pelanggan" value={rupiah(d.outstanding.customer_deposits)} note={`${d.motorcycles.dipesan || 0} unit dipesan`} tone="amber" />
-          <StatCard label="Pesanan menunggu unit" value={d.outstanding.deposits_unlinked ?? 0} note="uang muka yang unitnya belum ada" tone="violet" />
         </div>
       )}
 
